@@ -1,0 +1,14 @@
+*.jpg
+*.jpeg
+*.JPG
+*.JPEG
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
