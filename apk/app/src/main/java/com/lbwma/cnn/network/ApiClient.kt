@@ -17,8 +17,7 @@ import java.util.concurrent.TimeUnit
 data class Foto(val nome: String, val tamanhoKb: Double)
 
 object ApiClient {
-    var baseUrl: String = ""
-        private set
+    val baseUrl: String = "https://server.lbwma.com"
     private var credentials: String = ""
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -26,9 +25,12 @@ object ApiClient {
         .writeTimeout(120, TimeUnit.SECONDS)
         .build()
 
-    fun configure(url: String, user: String, pass: String) {
-        baseUrl = url.trimEnd('/')
+    fun configure(user: String, pass: String) {
         credentials = Credentials.basic(user, pass)
+    }
+
+    fun logout() {
+        credentials = ""
     }
 
     private fun authRequest(url: String): Request.Builder =
@@ -36,12 +38,20 @@ object ApiClient {
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
-    suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {
+    sealed class LoginResult { data object Ok : LoginResult(); data object Unauthorized : LoginResult(); data object NetworkError : LoginResult() }
+
+    suspend fun testConnection(): LoginResult = withContext(Dispatchers.IO) {
         try {
             val request = authRequest("$baseUrl/conversores").get().build()
-            client.newCall(request).execute().use { it.isSuccessful }
+            client.newCall(request).execute().use { response ->
+                when {
+                    response.isSuccessful -> LoginResult.Ok
+                    response.code == 401 || response.code == 403 -> LoginResult.Unauthorized
+                    else -> LoginResult.NetworkError
+                }
+            }
         } catch (_: Exception) {
-            false
+            LoginResult.NetworkError
         }
     }
 
