@@ -16,6 +16,7 @@ DATASET_DIR = BASE_DIR / "ml" / "datasets"
 DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXT = {"jpg", "jpeg", "png", "webp", "bmp"}
+PLACEHOLDER_NAME = "00.jpg"
 
 # Magic bytes para detectar tipo de imagem (substitui imghdr que foi removido)
 _SIGNATURES = {
@@ -72,6 +73,7 @@ def criar_conversor(nome: str, _user: str = Depends(auth)):
         raise HTTPException(400, "Nome inválido")
     pasta = DATASET_DIR / nome
     pasta.mkdir(parents=True, exist_ok=True)
+    (pasta / PLACEHOLDER_NAME).touch()
     return {"criado": nome}
 
 
@@ -83,7 +85,7 @@ def listar_fotos(conversor: str, _user: str = Depends(auth)):
         raise HTTPException(404, "Conversor não encontrado")
     fotos = []
     for f in sorted(pasta.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-        if f.is_file() and f.suffix.lower().lstrip(".") in ALLOWED_EXT:
+        if f.is_file() and f.name != PLACEHOLDER_NAME and f.suffix.lower().lstrip(".") in ALLOWED_EXT:
             fotos.append({
                 "nome": f.name,
                 "tamanho_kb": max(1, f.stat().st_size // 1024),
