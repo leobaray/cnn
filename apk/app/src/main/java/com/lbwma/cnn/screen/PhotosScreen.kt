@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -245,6 +246,13 @@ fun PhotosScreen(
                     Modifier.align(Alignment.Center).padding(48.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Icon(
+                        Icons.Outlined.Collections,
+                        contentDescription = null,
+                        modifier = Modifier.size(56.dp),
+                        tint = TextSecondary.copy(alpha = 0.25f)
+                    )
+                    Spacer(Modifier.height(16.dp))
                     Text("Nenhuma foto", style = MaterialTheme.typography.titleLarge, color = TextSecondary)
                     Spacer(Modifier.height(8.dp))
                     Text(

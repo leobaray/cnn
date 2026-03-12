@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
@@ -130,16 +132,26 @@ fun FullPhotoScreen(
             }
         }
 
-        Text(
-            fotoName,
-            style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        // Filename pill
+        Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 50.dp)
-                .padding(horizontal = 64.dp)
-        )
+                .padding(top = 46.dp)
+                .padding(horizontal = 72.dp)
+                .wrapContentWidth()
+                .background(
+                    Color.Black.copy(alpha = 0.35f),
+                    RoundedCornerShape(20.dp)
+                )
+                .padding(horizontal = 14.dp, vertical = 5.dp)
+        ) {
+            Text(
+                fotoName,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
