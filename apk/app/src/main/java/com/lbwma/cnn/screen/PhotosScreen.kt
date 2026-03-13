@@ -1,8 +1,6 @@
 package com.lbwma.cnn.screen
 
 import android.Manifest
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -21,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -50,8 +47,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,16 +68,14 @@ import coil.compose.AsyncImage
 import com.lbwma.cnn.network.ApiClient
 import com.lbwma.cnn.network.Foto
 import com.lbwma.cnn.network.ThumbnailCache
+import com.lbwma.cnn.network.UploadManager
 import com.lbwma.cnn.ui.theme.Cyan40
 import com.lbwma.cnn.ui.theme.Dark00
 import com.lbwma.cnn.ui.theme.Dark10
 import com.lbwma.cnn.ui.theme.Dark15
 import com.lbwma.cnn.ui.theme.TextSecondary
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,12 +91,13 @@ fun PhotosScreen(
     var fotos by remember { mutableStateOf<List<Foto>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var refreshing by remember { mutableStateOf(false) }
-    var pendingUploads by remember { mutableIntStateOf(0) }
     var showMenu by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+    val uploadState by UploadManager.state.collectAsState()
+    var hadUploads by remember { mutableStateOf(uploadState.pending > 0) }
 
     fun loadFotos(isRefresh: Boolean = false) {
         if (isRefresh) refreshing = true else loading = true
@@ -112,41 +108,29 @@ fun PhotosScreen(
         }
     }
 
-    suspend fun generateThumbnailFromBytes(fileName: String, bytes: ByteArray) = withContext(Dispatchers.IO) {
-        try {
-            val thumbFile = ThumbnailCache.getFile(conversorName, fileName)
-            if (thumbFile.exists()) return@withContext
-            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
-            val longerSide = maxOf(opts.outWidth, opts.outHeight)
-            var sampleSize = 1
-            while (longerSide / sampleSize > 600) sampleSize *= 2
-            val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-            val sampled = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOpts) ?: return@withContext
-            val scale = 300f / maxOf(sampled.width, sampled.height)
-            val thumb = Bitmap.createScaledBitmap(sampled, (sampled.width * scale).toInt(), (sampled.height * scale).toInt(), true)
-            sampled.recycle()
-            thumbFile.parentFile?.mkdirs()
-            FileOutputStream(thumbFile).use { thumb.compress(Bitmap.CompressFormat.JPEG, 70, it) }
-            thumb.recycle()
-        } catch (_: Exception) {}
+    // Detecta conclusão do upload (mesmo se o usuário saiu da tela e voltou)
+    LaunchedEffect(uploadState.pending) {
+        when {
+            uploadState.pending > 0 -> hadUploads = true
+            hadUploads -> {
+                hadUploads = false
+                loadFotos()
+                snackbar.showSnackbar("Upload concluído")
+            }
+        }
     }
 
-    fun uploadBytes(fileName: String, bytes: ByteArray) {
-        pendingUploads++
-        scope.launch {
-            generateThumbnailFromBytes(fileName, bytes)
-            ApiClient.uploadFoto(conversorName, fileName, bytes)
-                .onFailure { snackbar.showSnackbar("Erro ao enviar $fileName") }
-            pendingUploads--
-            if (pendingUploads == 0) { loadFotos(); snackbar.showSnackbar("Upload concluído") }
-        }
+    // Mostra erros do UploadManager
+    LaunchedEffect(uploadState.lastError) {
+        val err = uploadState.lastError ?: return@LaunchedEffect
+        snackbar.showSnackbar(err)
+        UploadManager.clearError()
     }
 
     LaunchedEffect(filesToUpload) {
         if (filesToUpload.isNotEmpty()) {
             snackbar.showSnackbar("Enviando ${filesToUpload.size} foto(s)...")
-            filesToUpload.forEach { file -> uploadBytes(file.name, file.readBytes()); file.delete() }
+            UploadManager.enqueue(conversorName, filesToUpload)
             onFilesConsumed()
         }
     }
@@ -155,8 +139,10 @@ fun PhotosScreen(
         uri?.let {
             scope.launch {
                 try {
-                    val bytes = context.contentResolver.openInputStream(it)?.readBytes()
-                    if (bytes != null) uploadBytes("foto_${System.currentTimeMillis()}.jpg", bytes)
+                    val bytes = context.contentResolver.openInputStream(it)?.readBytes() ?: return@launch
+                    val tempFile = File(context.cacheDir, "gallery_${System.currentTimeMillis()}.jpg")
+                    tempFile.writeBytes(bytes)
+                    UploadManager.enqueue(conversorName, listOf(tempFile))
                 } catch (_: Exception) {}
             }
         }
@@ -177,7 +163,7 @@ fun PhotosScreen(
                     Column {
                         Text(conversorName, style = MaterialTheme.typography.headlineMedium)
                         val subtitle = when {
-                            pendingUploads > 0 -> "Enviando $pendingUploads foto(s)..."
+                            uploadState.pending > 0 -> "Enviando ${uploadState.pending} foto(s)..."
                             fotos.isNotEmpty() -> "${fotos.size} foto(s)"
                             else -> null
                         }
@@ -231,7 +217,7 @@ fun PhotosScreen(
         snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            if (pendingUploads > 0) {
+            if (uploadState.pending > 0) {
                 LinearProgressIndicator(
                     Modifier.fillMaxWidth().align(Alignment.TopCenter),
                     color = Cyan40,

@@ -77,6 +77,26 @@ object ThumbnailCache {
         }
     }
 
+    suspend fun generateFromBytes(conversor: String, foto: String, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val file = getFile(conversor, foto)
+            if (file.exists()) return@withContext true
+            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+            val longerSide = maxOf(opts.outWidth, opts.outHeight)
+            var sampleSize = 1
+            while (longerSide / sampleSize > THUMB_SIZE * 2) sampleSize *= 2
+            val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            val sampled = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOpts) ?: return@withContext false
+            val scale = THUMB_SIZE.toFloat() / maxOf(sampled.width, sampled.height)
+            val thumb = Bitmap.createScaledBitmap(sampled, (sampled.width * scale).toInt(), (sampled.height * scale).toInt(), true)
+            sampled.recycle()
+            FileOutputStream(file).use { out -> thumb.compress(Bitmap.CompressFormat.JPEG, THUMB_QUALITY, out) }
+            thumb.recycle()
+            true
+        } catch (_: Exception) { false }
+    }
+
     fun clearConversor(conversor: String) {
         dir(conversor).deleteRecursively()
     }
