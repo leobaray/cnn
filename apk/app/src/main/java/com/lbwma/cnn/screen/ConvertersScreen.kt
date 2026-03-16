@@ -1,10 +1,19 @@
 package com.lbwma.cnn.screen
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,19 +21,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,8 +47,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,15 +58,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lbwma.cnn.network.ApiClient
 import com.lbwma.cnn.ui.theme.Cyan40
+import com.lbwma.cnn.ui.theme.Cyan60
 import com.lbwma.cnn.ui.theme.Dark00
 import com.lbwma.cnn.ui.theme.Dark10
 import com.lbwma.cnn.ui.theme.Dark15
+import com.lbwma.cnn.ui.theme.Dark20
+import com.lbwma.cnn.ui.theme.GlassBorder
+import com.lbwma.cnn.ui.theme.GlassHighlight
 import com.lbwma.cnn.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
@@ -85,38 +102,68 @@ fun ConvertersScreen(onConversorClick: (String) -> Unit) {
     Scaffold(
         containerColor = Dark00,
         topBar = {
-            TopAppBar(
-                title = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Dark00, Dark00, Color.Transparent)
+                        )
+                    )
+                    .statusBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Column {
-                        Text("Conversores", style = MaterialTheme.typography.headlineMedium)
+                        Text(
+                            "Conversores",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold
+                        )
                         if (conversores.isNotEmpty()) {
+                            Spacer(Modifier.height(2.dp))
                             Text(
-                                "${conversores.size} cadastrado(s)",
-                                style = MaterialTheme.typography.labelMedium,
+                                "${conversores.size} cadastrado${if (conversores.size != 1) "s" else ""}",
+                                style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
                         }
                     }
-                },
-                actions = {
-                    IconButton(onClick = { loadConversores(isRefresh = true) }) {
-                        Icon(Icons.Default.Refresh, "Atualizar", tint = TextSecondary)
+                    IconButton(
+                        onClick = { loadConversores(isRefresh = true) },
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Dark15)
+                    ) {
+                        Icon(Icons.Default.Refresh, "Atualizar", tint = TextSecondary, modifier = Modifier.size(20.dp))
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Dark00,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
+                }
+            }
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showDialog = true },
                 containerColor = Cyan40,
-                contentColor = Color.Black,
-                shape = RoundedCornerShape(16.dp)
+                contentColor = Color(0xFF00131E),
+                shape = RoundedCornerShape(18.dp),
+                elevation = FloatingActionButtonDefaults.elevation(
+                    defaultElevation = 12.dp,
+                    pressedElevation = 4.dp
+                ),
+                modifier = Modifier
+                    .drawBehind {
+                        drawCircle(
+                            color = Cyan40.copy(alpha = 0.25f),
+                            radius = size.minDimension / 1.5f
+                        )
+                    }
             ) {
-                Icon(Icons.Default.Add, "Novo conversor")
+                Icon(Icons.Default.Add, "Novo conversor", modifier = Modifier.size(26.dp))
             }
         },
         snackbarHost = { SnackbarHost(snackbar) }
@@ -133,23 +180,33 @@ fun ConvertersScreen(onConversorClick: (String) -> Unit) {
                         Modifier.align(Alignment.Center).padding(48.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            Icons.Outlined.Tune,
-                            contentDescription = null,
-                            modifier = Modifier.size(56.dp),
-                            tint = TextSecondary.copy(alpha = 0.25f)
-                        )
-                        Spacer(Modifier.height(16.dp))
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(96.dp)
+                                .clip(CircleShape)
+                                .background(Dark10)
+                                .border(1.dp, GlassBorder, CircleShape)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Tune,
+                                contentDescription = null,
+                                modifier = Modifier.size(42.dp),
+                                tint = TextSecondary.copy(alpha = 0.4f)
+                            )
+                        }
+                        Spacer(Modifier.height(24.dp))
                         Text(
                             "Nenhum conversor",
                             style = MaterialTheme.typography.titleLarge,
-                            color = TextSecondary
+                            color = TextSecondary,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
                             "Toque em + para criar o primeiro",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary.copy(alpha = 0.6f),
+                            color = TextSecondary.copy(alpha = 0.5f),
                             textAlign = TextAlign.Center
                         )
                     }
@@ -161,49 +218,75 @@ fun ConvertersScreen(onConversorClick: (String) -> Unit) {
                 ) {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 16.dp, vertical = 8.dp
-                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        itemsIndexed(conversores, key = { _, nome -> nome }) { _, nome ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .animateItem()
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            colors = listOf(Dark15, Dark10)
-                                        )
-                                    )
-                                    .clickable { onConversorClick(nome) }
-                                    .padding(20.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                        itemsIndexed(conversores, key = { _, nome -> nome }) { index, nome ->
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(tween(300, delayMillis = index * 50)) +
+                                        slideInVertically(
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                stiffness = Spring.StiffnessMedium
+                                            ),
+                                            initialOffsetY = { it / 3 }
+                                        ),
+                                modifier = Modifier.animateItem()
                             ) {
-                                Box(
-                                    Modifier
-                                        .width(4.dp)
-                                        .height(32.dp)
-                                        .clip(RoundedCornerShape(2.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
                                         .background(
-                                            Brush.verticalGradient(
-                                                colors = listOf(Cyan40, Cyan40.copy(alpha = 0.4f))
+                                            Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    GlassHighlight,
+                                                    Dark10,
+                                                    Dark10
+                                                )
                                             )
                                         )
-                                )
-                                Spacer(Modifier.width(16.dp))
-                                Text(
-                                    nome,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Icon(
-                                    Icons.Default.KeyboardArrowRight,
-                                    contentDescription = null,
-                                    tint = TextSecondary,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                        .clickable { onConversorClick(nome) }
+                                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Gradient accent bar
+                                    Box(
+                                        Modifier
+                                            .width(3.dp)
+                                            .height(36.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colors = listOf(Cyan40, Cyan60.copy(alpha = 0.3f))
+                                                )
+                                            )
+                                    )
+                                    Spacer(Modifier.width(16.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            nome,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(CircleShape)
+                                            .background(Dark15),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ChevronRight,
+                                            contentDescription = null,
+                                            tint = TextSecondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -216,21 +299,39 @@ fun ConvertersScreen(onConversorClick: (String) -> Unit) {
         AlertDialog(
             onDismissRequest = { showDialog = false; newName = "" },
             containerColor = Dark10,
-            title = { Text("Novo Conversor") },
-            text = {
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text("Nome do conversor") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Cyan40,
-                        unfocusedBorderColor = Dark15,
-                        focusedLabelColor = Cyan40,
-                        cursorColor = Cyan40,
-                    )
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    "Novo Conversor",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
                 )
+            },
+            text = {
+                Column {
+                    Text(
+                        "Insira o nome do conversor",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("Nome") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Cyan40,
+                            unfocusedBorderColor = Dark20,
+                            focusedLabelColor = Cyan40,
+                            cursorColor = Cyan40,
+                            focusedContainerColor = Dark15.copy(alpha = 0.5f),
+                            unfocusedContainerColor = Dark15.copy(alpha = 0.3f),
+                        )
+                    )
+                }
             },
             confirmButton = {
                 TextButton(
@@ -246,7 +347,13 @@ fun ConvertersScreen(onConversorClick: (String) -> Unit) {
                         }
                     },
                     enabled = newName.isNotBlank()
-                ) { Text("Criar", color = Cyan40) }
+                ) {
+                    Text(
+                        "Criar",
+                        color = if (newName.isNotBlank()) Cyan40 else TextSecondary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             },
             dismissButton = {
                 TextButton(onClick = { showDialog = false; newName = "" }) {

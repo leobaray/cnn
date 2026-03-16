@@ -45,7 +45,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,13 +65,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.lbwma.cnn.ui.theme.Cyan40
 import com.lbwma.cnn.ui.theme.Dark10
+import com.lbwma.cnn.ui.theme.Dark15
+import com.lbwma.cnn.ui.theme.GlassBorder
 import com.lbwma.cnn.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import java.io.File
@@ -199,36 +199,41 @@ fun CameraScreen(
             exit = fadeOut(tween(60)),
             modifier = Modifier.fillMaxSize()
         ) {
-            Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.5f)))
+            Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.45f)))
         }
 
         // Top gradient overlay
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(140.dp)
+                .height(150.dp)
                 .align(Alignment.TopCenter)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent)
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.7f),
+                            Color.Black.copy(alpha = 0.2f),
+                            Color.Transparent
+                        )
                     )
                 )
         )
 
-        // Top bar: back button + counter badge
+        // Top bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 onClick = { tryCancel() },
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.White.copy(alpha = 0.1f)
-                ),
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(Dark15.copy(alpha = 0.7f))
+                    .border(1.dp, GlassBorder, CircleShape)
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
@@ -248,12 +253,13 @@ fun CameraScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .background(Cyan40, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Cyan40)
+                        .padding(horizontal = 18.dp, vertical = 8.dp)
                 ) {
                     Text(
                         "$photoCount foto${if (photoCount != 1) "s" else ""}",
-                        color = Color.Black,
+                        color = Color(0xFF00131E),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -265,11 +271,15 @@ fun CameraScreen(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .height(220.dp)
                 .align(Alignment.BottomCenter)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.4f),
+                            Color.Black.copy(alpha = 0.8f)
+                        )
                     )
                 )
         )
@@ -295,14 +305,26 @@ fun CameraScreen(
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(80.dp)
+                    .size(82.dp)
                     .scale(buttonScale)
             ) {
-                // Outer ring
+                // Outer ring with gradient
                 Box(
                     Modifier
-                        .size(80.dp)
-                        .border(3.dp, Color.White.copy(alpha = 0.8f), CircleShape)
+                        .size(82.dp)
+                        .border(
+                            3.dp,
+                            Brush.sweepGradient(
+                                colors = listOf(
+                                    Color.White,
+                                    Color.White.copy(alpha = 0.6f),
+                                    Color.White,
+                                    Color.White.copy(alpha = 0.6f),
+                                    Color.White
+                                )
+                            ),
+                            CircleShape
+                        )
                 )
                 // Inner fill
                 Box(
@@ -317,9 +339,9 @@ fun CameraScreen(
                 )
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(28.dp))
 
-            // Send button (appears when photos taken)
+            // Send button
             AnimatedVisibility(
                 visible = photoCount > 0,
                 enter = fadeIn(),
@@ -328,22 +350,26 @@ fun CameraScreen(
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(28.dp))
-                        .background(Cyan40)
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(Cyan40, Cyan40.copy(alpha = 0.85f))
+                            )
+                        )
                         .clickable { onPhotosTaken(capturedFiles.toList()) }
-                        .padding(horizontal = 28.dp, vertical = 14.dp),
+                        .padding(horizontal = 32.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Icon(
                         Icons.Default.Check,
                         contentDescription = null,
-                        tint = Color.Black,
-                        modifier = Modifier.size(18.dp)
+                        tint = Color(0xFF00131E),
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(10.dp))
                     Text(
                         "Enviar $photoCount foto${if (photoCount != 1) "s" else ""}",
-                        color = Color.Black,
+                        color = Color(0xFF00131E),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -357,7 +383,14 @@ fun CameraScreen(
         AlertDialog(
             onDismissRequest = { showDiscardDialog = false },
             containerColor = Dark10,
-            title = { Text("Descartar fotos?") },
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    "Descartar fotos?",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Text(
                     "Você tirou $photoCount foto${if (photoCount != 1) "s" else ""} que ainda não ${if (photoCount != 1) "foram enviadas" else "foi enviada"}. Deseja descartar?",
@@ -369,7 +402,7 @@ fun CameraScreen(
                     showDiscardDialog = false
                     discardAndCancel()
                 }) {
-                    Text("Descartar", color = MaterialTheme.colorScheme.error)
+                    Text("Descartar", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
