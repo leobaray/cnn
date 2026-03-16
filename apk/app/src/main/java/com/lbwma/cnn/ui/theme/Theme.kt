@@ -12,7 +12,7 @@ import androidx.core.view.WindowCompat
 
 private val CnnColorScheme = darkColorScheme(
     primary = Cyan40,
-    onPrimary = Color.Black,
+    onPrimary = Color(0xFF00131E),
     primaryContainer = CyanDark,
     onPrimaryContainer = Cyan80,
     secondary = Success,
@@ -42,8 +42,8 @@ fun CnnTheme(content: @Composable () -> Unit) {
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = Dark00.toArgb()
-            window.navigationBarColor = Dark00.toArgb()
+            window.statusBarColor = Color.Transparent.toArgb()
+            window.navigationBarColor = Color.Transparent.toArgb()
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = false
                 isAppearanceLightNavigationBars = false
