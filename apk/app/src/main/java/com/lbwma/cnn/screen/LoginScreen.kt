@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -16,15 +17,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -41,12 +47,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.lbwma.cnn.BiometricHelper
 import com.lbwma.cnn.network.ApiClient
 import com.lbwma.cnn.ui.theme.Cyan40
 import com.lbwma.cnn.ui.theme.Dark00
@@ -54,10 +63,12 @@ import com.lbwma.cnn.ui.theme.Dark10
 import com.lbwma.cnn.ui.theme.Dark15
 import com.lbwma.cnn.ui.theme.Dark20
 import com.lbwma.cnn.ui.theme.TextSecondary
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(onLoginSuccess: () -> Unit, sessionExpired: Boolean = false) {
+    val context = LocalContext.current
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -67,7 +78,9 @@ fun LoginScreen(onLoginSuccess: () -> Unit, sessionExpired: Boolean = false) {
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
-    LaunchedEffect(Unit) { contentVisible = true }
+    val biometricAvailable = remember {
+        BiometricHelper.isBiometricAvailable(context) && BiometricHelper.hasSavedCredentials(context)
+    }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = Cyan40,
@@ -75,6 +88,38 @@ fun LoginScreen(onLoginSuccess: () -> Unit, sessionExpired: Boolean = false) {
         focusedLabelColor = Cyan40,
         cursorColor = Cyan40,
     )
+
+    fun doBiometricLogin() {
+        val executor = ContextCompat.getMainExecutor(context)
+        BiometricHelper.authenticate(
+            context = context,
+            executor = executor,
+            onSuccess = {
+                val creds = BiometricHelper.getSavedCredentials(context)
+                if (creds != null) {
+                    loading = true
+                    error = null
+                    showExpiredNotice = false
+                    ApiClient.configure(creds.first, creds.second)
+                    scope.launch {
+                        when (ApiClient.testConnection()) {
+                            ApiClient.LoginResult.Ok -> onLoginSuccess()
+                            ApiClient.LoginResult.Unauthorized -> {
+                                loading = false
+                                BiometricHelper.clearCredentials(context)
+                                error = "Credenciais salvas expiradas. Faça login novamente."
+                            }
+                            ApiClient.LoginResult.NetworkError -> {
+                                loading = false
+                                error = "Sem conexão com o servidor"
+                            }
+                        }
+                    }
+                }
+            },
+            onDismiss = { }
+        )
+    }
 
     fun doLogin() {
         if (loading || username.isBlank() || password.isBlank()) return
@@ -85,10 +130,23 @@ fun LoginScreen(onLoginSuccess: () -> Unit, sessionExpired: Boolean = false) {
         ApiClient.configure(username.trim(), password)
         scope.launch {
             when (ApiClient.testConnection()) {
-                ApiClient.LoginResult.Ok -> onLoginSuccess()
+                ApiClient.LoginResult.Ok -> {
+                    if (BiometricHelper.isBiometricAvailable(context)) {
+                        BiometricHelper.saveCredentials(context, username.trim(), password)
+                    }
+                    onLoginSuccess()
+                }
                 ApiClient.LoginResult.Unauthorized -> { loading = false; error = "Usuário ou senha incorretos" }
                 ApiClient.LoginResult.NetworkError -> { loading = false; error = "Sem conexão com o servidor" }
             }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        contentVisible = true
+        if (biometricAvailable && !sessionExpired) {
+            delay(400)
+            doBiometricLogin()
         }
     }
 
@@ -257,6 +315,35 @@ fun LoginScreen(onLoginSuccess: () -> Unit, sessionExpired: Boolean = false) {
                         } else {
                             Text(
                                 "ENTRAR",
+                                style = MaterialTheme.typography.labelLarge,
+                                letterSpacing = 2.sp
+                            )
+                        }
+                    }
+
+                    if (biometricAvailable) {
+                        Spacer(Modifier.height(14.dp))
+
+                        OutlinedButton(
+                            onClick = { doBiometricLogin() },
+                            enabled = !loading,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Cyan40.copy(alpha = 0.5f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Cyan40
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.Fingerprint,
+                                contentDescription = "Digital",
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "ENTRAR COM DIGITAL",
                                 style = MaterialTheme.typography.labelLarge,
                                 letterSpacing = 2.sp
                             )
