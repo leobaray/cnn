@@ -35,7 +35,7 @@ object ThumbnailCache {
         if (file.exists()) return@withContext true
 
         try {
-            val url = ApiClient.getFotoUrl(conversor, foto)
+            val url = ApiClient.getThumbUrl(conversor, foto)
             val request = Request.Builder()
                 .url(url)
                 .header("Authorization", ApiClient.getAuthHeader())
@@ -45,31 +45,7 @@ object ThumbnailCache {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext false
                 val bytes = response.body?.bytes() ?: return@withContext false
-
-                // Decodifica com downsampling pra economizar memória
-                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
-
-                val longerSide = maxOf(opts.outWidth, opts.outHeight)
-                var sampleSize = 1
-                while (longerSide / sampleSize > THUMB_SIZE * 2) sampleSize *= 2
-
-                val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-                val sampled = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOpts)
-                    ?: return@withContext false
-
-                // Redimensiona pro tamanho final
-                val scale = THUMB_SIZE.toFloat() / maxOf(sampled.width, sampled.height)
-                val w = (sampled.width * scale).toInt()
-                val h = (sampled.height * scale).toInt()
-                val thumb = Bitmap.createScaledBitmap(sampled, w, h, true)
-                sampled.recycle()
-
-                // Salva
-                FileOutputStream(file).use { out ->
-                    thumb.compress(Bitmap.CompressFormat.JPEG, THUMB_QUALITY, out)
-                }
-                thumb.recycle()
+                FileOutputStream(file).use { out -> out.write(bytes) }
                 true
             }
         } catch (_: Exception) {

@@ -4,12 +4,14 @@ API REST para coleta de fotos de conversores.
 Recebe requisições do APK Android e gerencia as pastas de dataset localmente.
 """
 
+import io
 import time
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, HTTPException, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from PIL import Image
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATASET_DIR = BASE_DIR / "ml" / "datasets"
@@ -27,7 +29,7 @@ _SIGNATURES = {
 }
 
 # Credenciais fixas
-USERS = {"Yottun": "admin"}
+USERS = {***REMOVED***}
 
 app = FastAPI(title="CNN Fotos API")
 security = HTTPBasic()
@@ -145,6 +147,19 @@ def deletar_foto(conversor: str, arquivo: str, _user: str = Depends(auth)):
         raise HTTPException(404, "Foto não encontrada")
     caminho.unlink()
     return {"deletado": arquivo}
+
+
+@app.get("/conversores/{conversor}/fotos/{arquivo}/thumb")
+def thumb_foto(conversor: str, arquivo: str, size: int = 300, _user: str = Depends(auth)):
+    conversor = sanitize(conversor)
+    caminho = DATASET_DIR / conversor / arquivo
+    if not caminho.exists() or not caminho.is_file():
+        raise HTTPException(404, "Foto não encontrada")
+    with Image.open(caminho) as img:
+        img.thumbnail((size, size), Image.Resampling.LANCZOS)
+        buf = io.BytesIO()
+        img.convert("RGB").save(buf, format="JPEG", quality=70, optimize=True)
+    return Response(content=buf.getvalue(), media_type="image/jpeg")
 
 
 @app.get("/conversores/{conversor}/fotos/{arquivo}/download")

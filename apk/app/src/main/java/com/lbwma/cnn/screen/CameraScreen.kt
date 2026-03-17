@@ -1,29 +1,26 @@
 package com.lbwma.cnn.screen
 
-import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.Log
-import android.util.Size
 import androidx.activity.compose.BackHandler
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
-import androidx.camera.core.resolutionselector.ResolutionSelector
-import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,11 +57,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -76,7 +74,6 @@ import com.lbwma.cnn.ui.theme.GlassBorder
 import com.lbwma.cnn.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.Executors
 
 @Composable
@@ -84,13 +81,24 @@ fun CameraScreen(
     onPhotosTaken: (List<File>) -> Unit,
     onCancel: () -> Unit
 ) {
+    // ---- Configuração do modo rajada (arrastar para cima para ativar) ----
+    val burstIntervalMs = 550L   // intervalo entre fotos no modo rajada (ms)
+    // -----------------------------------------------------------------------
+
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var photoCount by remember { mutableIntStateOf(0) }
     val capturedFiles = remember { mutableListOf<File>() }
     val executor = remember { Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val imageCapture = remember {
+        ImageCapture.Builder()
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .build()
+    }
     var showFlash by remember { mutableStateOf(false) }
+    var flashTrigger by remember { mutableIntStateOf(0) }
+    var isLocked by remember { mutableStateOf(false) }
     var showDiscardDialog by remember { mutableStateOf(false) }
     val vibrator = remember { context.getSystemService<Vibrator>() }
 
@@ -113,8 +121,9 @@ fun CameraScreen(
 
     BackHandler { tryCancel() }
 
-    LaunchedEffect(showFlash) {
-        if (showFlash) {
+    LaunchedEffect(flashTrigger) {
+        if (flashTrigger > 0) {
+            showFlash = true
             delay(80)
             showFlash = false
         }
@@ -125,17 +134,7 @@ fun CameraScreen(
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
 
-            val resolutionSelector = ResolutionSelector.Builder()
-                .setResolutionStrategy(
-                    ResolutionStrategy(
-                        Size(1920, 1080),
-                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
-                    )
-                )
-                .build()
-
             val preview = Preview.Builder()
-                .setResolutionSelector(resolutionSelector)
                 .build()
                 .also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
@@ -144,7 +143,8 @@ fun CameraScreen(
                 cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview
+                    preview,
+                    imageCapture
                 )
             } catch (e: Exception) {
                 Log.e("CameraScreen", "Erro ao abrir câmera", e)
@@ -158,33 +158,39 @@ fun CameraScreen(
     }
 
     fun capturePhoto() {
-        val original = previewView.bitmap ?: return
-        val bitmap = if (original.config == Bitmap.Config.HARDWARE) {
-            original.copy(Bitmap.Config.ARGB_8888, false).also { original.recycle() }
-        } else {
-            original
-        }
-
-        showFlash = true
         try {
             vibrator?.vibrate(
                 VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE)
             )
         } catch (_: Exception) {}
 
-        executor.execute {
-            try {
-                val file = File(context.cacheDir, "batch_${System.currentTimeMillis()}.jpg")
-                FileOutputStream(file).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+        val file = File(context.cacheDir, "batch_${System.currentTimeMillis()}.jpg")
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(file).build()
+
+        imageCapture.takePicture(
+            outputOptions,
+            executor,
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    capturedFiles.add(file)
+                    mainHandler.post {
+                        photoCount = capturedFiles.size
+                        flashTrigger++ // sincronizado com a confirmação real da foto
+                    }
                 }
-                bitmap.recycle()
-                capturedFiles.add(file)
-                mainHandler.post { photoCount = capturedFiles.size }
-            } catch (e: Exception) {
-                Log.e("CameraScreen", "Erro ao salvar foto", e)
-                bitmap.recycle()
+                override fun onError(exception: ImageCaptureException) {
+                    Log.e("CameraScreen", "Erro ao capturar foto", exception)
+                    file.delete()
+                }
             }
+        )
+    }
+
+    // Modo rajada: ativo enquanto isLocked, para ao clicar novamente
+    LaunchedEffect(isLocked) {
+        while (isLocked) {
+            capturePhoto()
+            delay(burstIntervalMs)
         }
     }
 
@@ -294,21 +300,12 @@ fun CameraScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Capture button
-            val interactionSource = remember { MutableInteractionSource() }
-            val isPressed by interactionSource.collectIsPressedAsState()
-            val buttonScale by animateFloatAsState(
-                targetValue = if (isPressed) 0.88f else 1f,
-                animationSpec = tween(100),
-                label = "captureScale"
-            )
-
+            val ringColor = if (isLocked) Cyan40 else Color.White
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(82.dp)
-                    .scale(buttonScale)
+                modifier = Modifier.size(82.dp)
             ) {
-                // Outer ring with gradient
+                // Outer ring
                 Box(
                     Modifier
                         .size(82.dp)
@@ -316,27 +313,59 @@ fun CameraScreen(
                             3.dp,
                             Brush.sweepGradient(
                                 colors = listOf(
-                                    Color.White,
-                                    Color.White.copy(alpha = 0.6f),
-                                    Color.White,
-                                    Color.White.copy(alpha = 0.6f),
-                                    Color.White
+                                    ringColor,
+                                    ringColor.copy(alpha = 0.6f),
+                                    ringColor,
+                                    ringColor.copy(alpha = 0.6f),
+                                    ringColor
                                 )
                             ),
                             CircleShape
                         )
                 )
-                // Inner fill
+                // Inner fill — arrastar para cima ativa rajada, toque para/dispara
                 Box(
-                    Modifier
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
                         .size(66.dp)
                         .clip(CircleShape)
-                        .background(Color.White)
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null
-                        ) { capturePhoto() }
-                )
+                        .background(if (isLocked) Cyan40 else Color.White)
+                        .pointerInput(isLocked) {
+                            val dragThresholdPx = 50.dp.toPx()
+                            awaitEachGesture {
+                                val down = awaitFirstDown()
+                                down.consume()
+                                val startY = down.position.y
+                                var didDragUp = false
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull() ?: break
+                                    if (!change.pressed) {
+                                        if (!didDragUp) {
+                                            if (isLocked) isLocked = false
+                                            else capturePhoto()
+                                        }
+                                        break
+                                    }
+                                    if (change.position.y - startY < -dragThresholdPx) {
+                                        change.consume()
+                                        isLocked = true
+                                        didDragUp = true
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                ) {
+                    if (isLocked) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = "Parar rajada",
+                            tint = Color(0xFF00131E),
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(28.dp))

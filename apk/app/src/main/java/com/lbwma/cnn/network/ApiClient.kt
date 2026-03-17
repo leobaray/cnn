@@ -155,6 +155,9 @@ object ApiClient {
     fun getFotoUrl(nome: String, arquivo: String): String =
         "$baseUrl/conversores/${encode(nome)}/fotos/${encode(arquivo)}/download"
 
+    fun getThumbUrl(nome: String, arquivo: String): String =
+        "$baseUrl/conversores/${encode(nome)}/fotos/${encode(arquivo)}/thumb"
+
     fun getAuthHeader(): String = credentials
 
     fun getAuthInterceptor(): Interceptor = Interceptor { chain ->
