@@ -158,6 +158,21 @@ object ApiClient {
     fun getThumbUrl(nome: String, arquivo: String): String =
         "$baseUrl/conversores/${encode(nome)}/fotos/${encode(arquivo)}/thumb"
 
+    suspend fun checkUpdate(): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder().url("$baseUrl/app/version").get().build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext Result.failure(Exception("Erro ${response.code}"))
+                val json = JSONObject(response.body!!.string())
+                Result.success(json.getInt("versionCode"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun getApkDownloadUrl(): String = "$baseUrl/app/download"
+
     fun getAuthHeader(): String = credentials
 
     fun getAuthInterceptor(): Interceptor = Interceptor { chain ->
