@@ -75,12 +75,18 @@ import com.lbwma.cnn.ui.theme.Dark20
 import com.lbwma.cnn.ui.theme.GlassBorder
 import com.lbwma.cnn.ui.theme.GlassHighlight
 import com.lbwma.cnn.ui.theme.TextSecondary
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConvertersScreen(onConversorClick: (String) -> Unit) {
+fun ConvertersScreen(
+    onConversorClick: (String) -> Unit,
+    iaMode: Boolean,
+    onIaModeChange: (Boolean) -> Unit
+) {
     var conversores by remember { mutableStateOf<List<String>>(emptyList()) }
+    var fotoCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
     var refreshing by remember { mutableStateOf(false) }
     var showDialog by remember { mutableStateOf(false) }
@@ -98,6 +104,19 @@ fun ConvertersScreen(onConversorClick: (String) -> Unit) {
     }
 
     LaunchedEffect(Unit) { loadConversores() }
+
+    // Carrega contagem de fotos de cada conversor em paralelo
+    LaunchedEffect(conversores) {
+        if (conversores.isEmpty()) return@LaunchedEffect
+        fotoCounts = emptyMap()
+        val jobs = conversores.map { nome ->
+            async { nome to (ApiClient.getFotos(nome).getOrNull()?.size ?: 0) }
+        }
+        jobs.forEach { deferred ->
+            val (nome, count) = deferred.await()
+            fotoCounts = fotoCounts + (nome to count)
+        }
+    }
 
     Scaffold(
         containerColor = Dark00,
@@ -133,14 +152,44 @@ fun ConvertersScreen(onConversorClick: (String) -> Unit) {
                             )
                         }
                     }
-                    IconButton(
-                        onClick = { loadConversores(isRefresh = true) },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(Dark15)
-                    ) {
-                        Icon(Icons.Default.Refresh, "Atualizar", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Toggle de modo: Fotos / IA
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50.dp))
+                                .background(Dark15)
+                                .border(1.dp, GlassBorder, RoundedCornerShape(50.dp))
+                                .padding(3.dp)
+                        ) {
+                            listOf("Fotos" to false, "IA" to true).forEach { (label, isIa) ->
+                                val selected = iaMode == isIa
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50.dp))
+                                        .background(if (selected) Cyan40 else Color.Transparent)
+                                        .clickable { onIaModeChange(isIa) }
+                                        .padding(horizontal = 18.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        label,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (selected) Color(0xFF00131E) else TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { loadConversores(isRefresh = true) },
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(Dark15)
+                        ) {
+                            Icon(Icons.Default.Refresh, "Atualizar", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
             }
@@ -252,16 +301,17 @@ fun ConvertersScreen(onConversorClick: (String) -> Unit) {
                                         .padding(horizontal = 20.dp, vertical = 18.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Gradient accent bar
+                                    // Gradient accent bar — verde quando atingir 4400 fotos
+                                    val complete = (fotoCounts[nome] ?: 0) >= 4400
+                                    val barTop = if (complete) Color(0xFF4CAF50) else Cyan40
+                                    val barBottom = if (complete) Color(0xFF4CAF50).copy(alpha = 0.3f) else Cyan60.copy(alpha = 0.3f)
                                     Box(
                                         Modifier
                                             .width(3.dp)
                                             .height(36.dp)
                                             .clip(RoundedCornerShape(2.dp))
                                             .background(
-                                                Brush.verticalGradient(
-                                                    colors = listOf(Cyan40, Cyan60.copy(alpha = 0.3f))
-                                                )
+                                                Brush.verticalGradient(colors = listOf(barTop, barBottom))
                                             )
                                     )
                                     Spacer(Modifier.width(16.dp))
