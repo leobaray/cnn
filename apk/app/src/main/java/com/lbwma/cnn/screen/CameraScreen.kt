@@ -82,6 +82,7 @@ import java.util.concurrent.Executors
 @Composable
 fun CameraScreen(
     iaMode: Boolean,
+    filtroId: Int? = null,
     onPhotosTaken: (List<File>) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -182,7 +183,8 @@ fun CameraScreen(
 
         executor.execute {
             try {
-                val file = File(context.cacheDir, "batch_${System.currentTimeMillis()}.jpg")
+                val prefix = if (filtroId != null) "f%02d".format(filtroId) else "batch"
+                val file = File(context.cacheDir, "${prefix}_${System.currentTimeMillis()}.jpg")
                 FileOutputStream(file).use { out ->
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
                 }
