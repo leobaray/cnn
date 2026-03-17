@@ -5,6 +5,7 @@ Recebe requisições do APK Android e gerencia as pastas de dataset localmente.
 """
 
 import io
+import re
 import time
 from pathlib import Path
 
@@ -29,7 +30,10 @@ _SIGNATURES = {
 }
 
 # Credenciais fixas
-USERS = {***REMOVED***}
+USERS = {
+    ***REMOVED***,
+    "matheus": "1235"
+}
 
 app = FastAPI(title="CNN Fotos API")
 security = HTTPBasic()
@@ -109,7 +113,10 @@ async def enviar_fotos(conversor: str, fotos: list[UploadFile], _user: str = Dep
     for foto in fotos:
         try:
             ts = time.strftime("%Y%m%d_%H%M%S")
-            base = f"{conversor}_{ts}_{int(time.time()*1000)%1000:03d}"
+            nome_orig = foto.filename or ""
+            prefix_match = re.match(r"^(f\d{2}_)", nome_orig)
+            prefix = prefix_match.group(1) if prefix_match else ""
+            base = f"{prefix}{conversor}_{ts}_{int(time.time()*1000)%1000:03d}"
             tmp = pasta / f"{base}.uploading"
 
             conteudo = await foto.read()

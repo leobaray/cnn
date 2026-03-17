@@ -94,6 +94,7 @@ fun PhotosScreen(
     conversorName: String,
     imageLoader: ImageLoader,
     filesToUpload: List<File>,
+    filterPrefix: String? = null,
     onFilesConsumed: () -> Unit,
     onOpenCamera: () -> Unit,
     onViewPhoto: (String) -> Unit,
@@ -114,7 +115,10 @@ fun PhotosScreen(
         if (isRefresh) refreshing = true else loading = true
         scope.launch {
             ApiClient.getFotos(conversorName)
-                .onSuccess { fotos = it; loading = false; refreshing = false }
+                .onSuccess { result ->
+                    fotos = if (filterPrefix != null) result.filter { it.nome.startsWith(filterPrefix) } else result
+                    loading = false; refreshing = false
+                }
                 .onFailure { loading = false; refreshing = false; snackbar.showSnackbar("Erro: ${it.message}") }
         }
     }
@@ -199,6 +203,7 @@ fun PhotosScreen(
                             fontWeight = FontWeight.Bold
                         )
                         val subtitle = when {
+                            filterPrefix != null && fotos.isNotEmpty() -> "${fotos.size} foto${if (fotos.size != 1) "s" else ""} · $filterPrefix"
                             uploadState.pending > 0 -> "Enviando ${uploadState.pending} foto(s)..."
                             fotos.isNotEmpty() -> "${fotos.size} foto${if (fotos.size != 1) "s" else ""}"
                             else -> null
@@ -220,6 +225,7 @@ fun PhotosScreen(
             }
         },
         floatingActionButton = {
+            if (filterPrefix != null) return@Scaffold
             Box {
                 FloatingActionButton(
                     onClick = { showMenu = true },
