@@ -45,7 +45,7 @@ sealed class Screen {
     data object Login : Screen()
     data object Converters : Screen()
     data class Photos(val name: String) : Screen()
-    data class Camera(val conversorName: String) : Screen()
+    data class Camera(val conversorName: String, val iaMode: Boolean) : Screen()
     data class FullPhoto(val conversorName: String, val fotoName: String) : Screen()
 
     val depth: Int get() = when (this) {
@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
                 var screen by remember { mutableStateOf<Screen>(Screen.Login) }
                 var previousDepth by remember { mutableStateOf(0) }
                 var filesToUpload by remember { mutableStateOf<List<File>>(emptyList()) }
+                var iaMode by remember { mutableStateOf(false) }
                 var sessionExpired by remember { mutableStateOf(false) }
                 var lastActivityMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
@@ -155,20 +156,23 @@ class MainActivity : ComponentActivity() {
                                 sessionExpired = sessionExpired
                             )
                             Screen.Converters -> ConvertersScreen(
-                                onConversorClick = { screen = Screen.Photos(it) }
+                                onConversorClick = { screen = Screen.Photos(it) },
+                                iaMode = iaMode,
+                                onIaModeChange = { iaMode = it }
                             )
                             is Screen.Photos -> PhotosScreen(
                                 conversorName = current.name,
                                 imageLoader = imageLoader,
                                 filesToUpload = filesToUpload,
                                 onFilesConsumed = { filesToUpload = emptyList() },
-                                onOpenCamera = { screen = Screen.Camera(current.name) },
+                                onOpenCamera = { screen = Screen.Camera(current.name, iaMode) },
                                 onViewPhoto = { foto ->
                                     screen = Screen.FullPhoto(current.name, foto)
                                 },
                                 onBack = { screen = Screen.Converters }
                             )
                             is Screen.Camera -> CameraScreen(
+                                iaMode = current.iaMode,
                                 onPhotosTaken = { files ->
                                     filesToUpload = files
                                     screen = Screen.Photos(current.conversorName)

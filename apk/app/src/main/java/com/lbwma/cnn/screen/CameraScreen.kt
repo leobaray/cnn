@@ -1,5 +1,6 @@
 package com.lbwma.cnn.screen
 
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
@@ -7,11 +8,10 @@ import android.os.Vibrator
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Canvas
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -61,6 +61,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -74,15 +76,17 @@ import com.lbwma.cnn.ui.theme.GlassBorder
 import com.lbwma.cnn.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.Executors
 
 @Composable
 fun CameraScreen(
+    iaMode: Boolean,
     onPhotosTaken: (List<File>) -> Unit,
     onCancel: () -> Unit
 ) {
     // ---- Configuração do modo rajada (arrastar para cima para ativar) ----
-    val burstIntervalMs = 550L   // intervalo entre fotos no modo rajada (ms)
+    val burstIntervalMs = 250L   // intervalo entre fotos no modo rajada (ms)
     // -----------------------------------------------------------------------
 
     val context = LocalContext.current
@@ -91,11 +95,6 @@ fun CameraScreen(
     val capturedFiles = remember { mutableListOf<File>() }
     val executor = remember { Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    val imageCapture = remember {
-        ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            .build()
-    }
     var showFlash by remember { mutableStateOf(false) }
     var flashTrigger by remember { mutableIntStateOf(0) }
     var isLocked by remember { mutableStateOf(false) }
@@ -143,8 +142,7 @@ fun CameraScreen(
                 cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview,
-                    imageCapture
+                    preview
                 )
             } catch (e: Exception) {
                 Log.e("CameraScreen", "Erro ao abrir câmera", e)
@@ -158,32 +156,47 @@ fun CameraScreen(
     }
 
     fun capturePhoto() {
+        val original = previewView.bitmap ?: return
+        val decoded = if (original.config == Bitmap.Config.HARDWARE) {
+            original.copy(Bitmap.Config.ARGB_8888, false).also { original.recycle() }
+        } else {
+            original
+        }
+
+        val bitmap = if (iaMode) {
+            val size = minOf(decoded.width, decoded.height)
+            val x = (decoded.width - size) / 2
+            val y = (decoded.height - size) / 2
+            val square = Bitmap.createBitmap(decoded, x, y, size, size)
+            decoded.recycle()
+            Bitmap.createScaledBitmap(square, 512, 512, true).also { square.recycle() }
+        } else {
+            decoded
+        }
+
         try {
             vibrator?.vibrate(
                 VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE)
             )
         } catch (_: Exception) {}
 
-        val file = File(context.cacheDir, "batch_${System.currentTimeMillis()}.jpg")
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(file).build()
-
-        imageCapture.takePicture(
-            outputOptions,
-            executor,
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    capturedFiles.add(file)
-                    mainHandler.post {
-                        photoCount = capturedFiles.size
-                        flashTrigger++ // sincronizado com a confirmação real da foto
-                    }
+        executor.execute {
+            try {
+                val file = File(context.cacheDir, "batch_${System.currentTimeMillis()}.jpg")
+                FileOutputStream(file).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
                 }
-                override fun onError(exception: ImageCaptureException) {
-                    Log.e("CameraScreen", "Erro ao capturar foto", exception)
-                    file.delete()
+                bitmap.recycle()
+                capturedFiles.add(file)
+                mainHandler.post {
+                    photoCount = capturedFiles.size
+                    flashTrigger++
                 }
+            } catch (e: Exception) {
+                Log.e("CameraScreen", "Erro ao salvar foto", e)
+                bitmap.recycle()
             }
-        )
+        }
     }
 
     // Modo rajada: ativo enquanto isLocked, para ao clicar novamente
@@ -206,6 +219,33 @@ fun CameraScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.45f)))
+        }
+
+        // Overlay quadrado para modo IA
+        if (iaMode) {
+            Canvas(Modifier.fillMaxSize()) {
+                val sqPx = minOf(size.width, size.height)
+                val left = (size.width - sqPx) / 2f
+                val top = (size.height - sqPx) / 2f
+                val dark = Color.Black.copy(alpha = 0.6f)
+
+                // Faixas escuras fora do quadrado
+                drawRect(dark, topLeft = Offset(0f, 0f), size = Size(size.width, top))
+                drawRect(dark, topLeft = Offset(0f, top + sqPx), size = Size(size.width, size.height - top - sqPx))
+
+                // Marcadores de canto
+                val corner = 72f
+                val stroke = 4f
+                val white = Color.White
+                drawLine(white, Offset(left, top), Offset(left + corner, top), stroke)
+                drawLine(white, Offset(left, top), Offset(left, top + corner), stroke)
+                drawLine(white, Offset(left + sqPx, top), Offset(left + sqPx - corner, top), stroke)
+                drawLine(white, Offset(left + sqPx, top), Offset(left + sqPx, top + corner), stroke)
+                drawLine(white, Offset(left, top + sqPx), Offset(left + corner, top + sqPx), stroke)
+                drawLine(white, Offset(left, top + sqPx), Offset(left, top + sqPx - corner), stroke)
+                drawLine(white, Offset(left + sqPx, top + sqPx), Offset(left + sqPx - corner, top + sqPx), stroke)
+                drawLine(white, Offset(left + sqPx, top + sqPx), Offset(left + sqPx, top + sqPx - corner), stroke)
+            }
         }
 
         // Top gradient overlay
