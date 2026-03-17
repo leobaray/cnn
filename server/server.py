@@ -18,6 +18,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATASET_DIR = BASE_DIR / "ml" / "datasets"
 DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
+APK_PATH = Path(__file__).resolve().parent / "app.apk"
+APP_VERSION_CODE = 1
+
 ALLOWED_EXT = {"jpg", "jpeg", "png", "webp", "bmp"}
 PLACEHOLDER_NAME = "00.jpg"
 
@@ -176,6 +179,22 @@ def baixar_foto(conversor: str, arquivo: str, _user: str = Depends(auth)):
     if not caminho.exists() or not caminho.is_file():
         raise HTTPException(404, "Foto não encontrada")
     return FileResponse(caminho)
+
+
+@app.get("/app/version")
+def app_version():
+    return {"versionCode": APP_VERSION_CODE}
+
+
+@app.get("/app/download")
+def app_download():
+    if not APK_PATH.exists():
+        raise HTTPException(404, "APK não encontrado")
+    return FileResponse(
+        APK_PATH,
+        media_type="application/vnd.android.package-archive",
+        filename="cnn.apk",
+    )
 
 
 if __name__ == "__main__":

@@ -13,20 +13,35 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -37,6 +52,8 @@ import coil.memory.MemoryCache
 import com.lbwma.cnn.model.FILTROS
 import com.lbwma.cnn.model.RefinementStore
 import com.lbwma.cnn.network.ApiClient
+import com.lbwma.cnn.network.AppUpdater
+import com.lbwma.cnn.network.UpdateState
 import com.lbwma.cnn.network.ThumbnailCache
 import com.lbwma.cnn.screen.CameraScreen
 import com.lbwma.cnn.screen.ConvertersScreen
@@ -47,6 +64,7 @@ import com.lbwma.cnn.screen.PhotosScreen
 import com.lbwma.cnn.screen.ReviewScreen
 import com.lbwma.cnn.ui.theme.CnnTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.io.File
@@ -90,6 +108,11 @@ class MainActivity : ComponentActivity() {
                 var postCaptureState by remember { mutableStateOf<Triple<String, Int, List<File>>?>(null) }
                 var sessionExpired by remember { mutableStateOf(false) }
                 var lastActivityMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+                val updateState by AppUpdater.state.collectAsState()
+                val updateScope = rememberCoroutineScope()
+                val currentVersionCode = remember {
+                    packageManager.getPackageInfo(packageName, 0).longVersionCode.toInt()
+                }
 
                 val imageLoader = remember {
                     ImageLoader.Builder(this@MainActivity)
@@ -112,6 +135,9 @@ class MainActivity : ComponentActivity() {
                         }
                         .build()
                 }
+
+                // Checa atualização ao abrir o app
+                LaunchedEffect(Unit) { AppUpdater.check(currentVersionCode) }
 
                 // Session timeout — reinicia o contador a cada mudança de tela
                 LaunchedEffect(screen) {
@@ -249,6 +275,138 @@ class MainActivity : ComponentActivity() {
                                 onBack = { screen = Screen.Photos(current.conversorName) }
                             )
                         }
+                    }
+
+                    // Bloqueio de atualização obrigatória
+                    when (val us = updateState) {
+                        is UpdateState.Available -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(com.lbwma.cnn.ui.theme.Dark00.copy(alpha = 0.95f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(40.dp)
+                                ) {
+                                    Text(
+                                        "Atualização disponível",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        "Uma nova versão do app está disponível. Atualize para continuar.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = com.lbwma.cnn.ui.theme.TextSecondary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(Modifier.height(28.dp))
+                                    TextButton(onClick = {
+                                        updateScope.launch { AppUpdater.downloadAndInstall(this@MainActivity) }
+                                    }) {
+                                        Text(
+                                            "Atualizar agora",
+                                            color = com.lbwma.cnn.ui.theme.Cyan40,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        is UpdateState.Downloading -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(com.lbwma.cnn.ui.theme.Dark00.copy(alpha = 0.95f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(40.dp)
+                                ) {
+                                    Text(
+                                        "Baixando atualização…",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(Modifier.height(20.dp))
+                                    LinearProgressIndicator(
+                                        progress = { us.progress },
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.7f)
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp)),
+                                        color = com.lbwma.cnn.ui.theme.Cyan40,
+                                        trackColor = com.lbwma.cnn.ui.theme.Dark15,
+                                        strokeCap = StrokeCap.Round
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "${(us.progress * 100).toInt()}%",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = com.lbwma.cnn.ui.theme.TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                        is UpdateState.Installing -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(com.lbwma.cnn.ui.theme.Dark00.copy(alpha = 0.95f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    CircularProgressIndicator(
+                                        color = com.lbwma.cnn.ui.theme.Cyan40,
+                                        strokeWidth = 3.dp
+                                    )
+                                    Spacer(Modifier.height(16.dp))
+                                    Text("Instalando…", style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                        }
+                        is UpdateState.Error -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(com.lbwma.cnn.ui.theme.Dark00.copy(alpha = 0.95f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(40.dp)
+                                ) {
+                                    Text(
+                                        "Erro na atualização",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        us.message,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = com.lbwma.cnn.ui.theme.TextSecondary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(Modifier.height(20.dp))
+                                    TextButton(onClick = {
+                                        updateScope.launch { AppUpdater.downloadAndInstall(this@MainActivity) }
+                                    }) {
+                                        Text(
+                                            "Tentar novamente",
+                                            color = com.lbwma.cnn.ui.theme.Cyan40,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        else -> {} // Idle, Checking — não bloqueia
                     }
 
                     // Diálogo overlay pós-captura IA
