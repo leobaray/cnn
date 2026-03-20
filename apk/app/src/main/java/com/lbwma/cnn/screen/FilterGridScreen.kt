@@ -1,5 +1,12 @@
 package com.lbwma.cnn.screen
 
+import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
@@ -35,6 +42,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,6 +52,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -58,13 +67,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
 import com.lbwma.cnn.model.FILTROS
 import com.lbwma.cnn.model.FOTOS_POR_FILTRO
 import com.lbwma.cnn.model.RefinementStore
 import com.lbwma.cnn.network.ApiClient
 import com.lbwma.cnn.network.UploadManager
+import com.lbwma.cnn.network.UploadState
 import com.lbwma.cnn.ui.theme.Cyan40
 import com.lbwma.cnn.ui.theme.Dark00
 import com.lbwma.cnn.ui.theme.Dark10
@@ -85,11 +97,24 @@ fun FilterGridScreen(
     var filterCounts by remember { mutableStateOf<Map<Int, Int>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
     val pendingMap by RefinementStore.pending.collectAsState()
-    val uploadState by UploadManager.state.collectAsState()
+    val uploadState by UploadManager.stateFor(conversorName).collectAsState(UploadState())
     var hadUploads by remember { mutableStateOf(uploadState.pending > 0) }
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val green = Color(0xFF4CAF50)
+    val context = LocalContext.current
+    val activity = context as Activity
+    var showPermissionDialog by remember { mutableStateOf(false) }
+    var permanentlyDenied by remember { mutableStateOf(false) }
+    var pendingFiltroId by remember { mutableStateOf<Int?>(null) }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val id = pendingFiltroId ?: return@rememberLauncherForActivityResult
+        if (granted) onFilterClick(id)
+        else {
+            permanentlyDenied = !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.CAMERA)
+            showPermissionDialog = true
+        }
+    }
 
     fun loadCounts() {
         loading = true
@@ -111,10 +136,23 @@ fun FilterGridScreen(
 
     LaunchedEffect(Unit) { loadCounts() }
 
+    // Quando todos os uploads terminam, busca contagens reais do servidor e limpa completed
     LaunchedEffect(uploadState.pending) {
         when {
             uploadState.pending > 0 -> hadUploads = true
-            hadUploads -> { hadUploads = false; loadCounts() }
+            hadUploads -> {
+                hadUploads = false
+                loadCounts()
+                UploadManager.clearCompleted(conversorName)
+            }
+        }
+    }
+
+    // Contagem de uploads concluídos por filtro (incrementa em tempo real)
+    val completedForConversor = uploadState.completed
+    val uploadedPerFilter = remember(completedForConversor.size) {
+        FILTROS.associate { f ->
+            f.id to completedForConversor.count { it.startsWith("${f.prefix}_") }
         }
     }
 
@@ -188,8 +226,8 @@ fun FilterGridScreen(
                     strokeWidth = 2.5.dp
                 )
             } else {
-                // Total progress
-                val totalFotos = filterCounts.values.sum()
+                // Total progress (servidor + uploads concluídos)
+                val totalFotos = filterCounts.values.sum() + completedForConversor.size
                 val totalTarget = FILTROS.size * FOTOS_POR_FILTRO
 
                 LazyVerticalGrid(
@@ -225,7 +263,8 @@ fun FilterGridScreen(
                     }
 
                     itemsIndexed(FILTROS, key = { _, f -> f.id }) { index, filtro ->
-                        val count = filterCounts[filtro.id] ?: 0
+                        val serverCount = filterCounts[filtro.id] ?: 0
+                        val count = serverCount + (uploadedPerFilter[filtro.id] ?: 0)
                         val complete = count >= FOTOS_POR_FILTRO
                         val hasPending = pendingMap.containsKey("${conversorName}_${filtro.id}")
 
@@ -259,7 +298,10 @@ fun FilterGridScreen(
                                             when {
                                                 hasPending -> onReviewClick(filtro.id)
                                                 complete -> scope.launch { snackbar.showSnackbar("Filtro completo") }
-                                                else -> onFilterClick(filtro.id)
+                                                else -> {
+                                            pendingFiltroId = filtro.id
+                                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                        }
                                             }
                                         },
                                         onLongClick = { onFilterLongClick(filtro.id) }
@@ -325,5 +367,53 @@ fun FilterGridScreen(
                 }
             }
         }
+    }
+
+    if (showPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            containerColor = Dark10,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    "Câmera necessária",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    if (permanentlyDenied)
+                        "Para usar o aplicativo é necessário o acesso à câmera. Abra as configurações e conceda a permissão."
+                    else
+                        "Para usar o aplicativo é necessário o acesso à câmera. Conceda a permissão para continuar.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPermissionDialog = false
+                    if (permanentlyDenied) {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(intent)
+                    } else {
+                        pendingFiltroId?.let { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) }
+                    }
+                }) {
+                    Text(
+                        if (permanentlyDenied) "Abrir configurações" else "Tentar novamente",
+                        color = Cyan40,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionDialog = false }) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            }
+        )
     }
 }

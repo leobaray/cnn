@@ -9,7 +9,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,7 +80,7 @@ import com.lbwma.cnn.ui.theme.TextSecondary
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConvertersScreen(
     onConversorClick: (String) -> Unit,
@@ -91,6 +93,11 @@ fun ConvertersScreen(
     var refreshing by remember { mutableStateOf(false) }
     var showDialog by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    var selectedConversor by remember { mutableStateOf<String?>(null) }
+    var showOptionsDialog by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var renameText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
 
@@ -297,7 +304,13 @@ fun ConvertersScreen(
                                                 )
                                             )
                                         )
-                                        .clickable { onConversorClick(nome) }
+                                        .combinedClickable(
+                                            onClick = { onConversorClick(nome) },
+                                            onLongClick = {
+                                                selectedConversor = nome
+                                                showOptionsDialog = true
+                                            }
+                                        )
                                         .padding(horizontal = 20.dp, vertical = 18.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -407,6 +420,175 @@ fun ConvertersScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDialog = false; newName = "" }) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    // Diálogo de opções (long press)
+    if (showOptionsDialog && selectedConversor != null) {
+        AlertDialog(
+            onDismissRequest = { showOptionsDialog = false },
+            containerColor = Dark10,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    selectedConversor!!,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        onClick = {
+                            showOptionsDialog = false
+                            renameText = selectedConversor!!
+                            showRenameDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Renomear", color = Cyan40, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.fillMaxWidth())
+                    }
+                    TextButton(
+                        onClick = {
+                            showOptionsDialog = false
+                            showDeleteDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Apagar", color = Color(0xFFEF5350), fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showOptionsDialog = false }) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    // Diálogo de renomear
+    if (showRenameDialog && selectedConversor != null) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            containerColor = Dark10,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    "Renomear Conversor",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        "Novo nome para \"${selectedConversor}\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = renameText,
+                        onValueChange = { renameText = it },
+                        label = { Text("Nome") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Cyan40,
+                            unfocusedBorderColor = Dark20,
+                            focusedLabelColor = Cyan40,
+                            cursorColor = Cyan40,
+                            focusedContainerColor = Dark15.copy(alpha = 0.5f),
+                            unfocusedContainerColor = Dark15.copy(alpha = 0.3f),
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val novo = renameText.trim()
+                        val atual = selectedConversor!!
+                        if (novo.isNotEmpty() && novo != atual) {
+                            showRenameDialog = false
+                            scope.launch {
+                                ApiClient.renameConversor(atual, novo)
+                                    .onSuccess { loadConversores(); snackbar.showSnackbar("Renomeado para \"$novo\"") }
+                                    .onFailure { snackbar.showSnackbar("Erro: ${it.message}") }
+                            }
+                        }
+                    },
+                    enabled = renameText.isNotBlank() && renameText.trim() != selectedConversor
+                ) {
+                    val enabled = renameText.isNotBlank() && renameText.trim() != selectedConversor
+                    Text(
+                        "Renomear",
+                        color = if (enabled) Cyan40 else TextSecondary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    // Diálogo de confirmar exclusão
+    if (showDeleteDialog && selectedConversor != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            containerColor = Dark10,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    "Apagar Conversor",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        "Tem certeza que deseja apagar \"${selectedConversor}\"?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Todas as fotos serão excluídas permanentemente.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFEF5350)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val nome = selectedConversor!!
+                        showDeleteDialog = false
+                        scope.launch {
+                            ApiClient.deleteConversor(nome)
+                                .onSuccess { loadConversores(); snackbar.showSnackbar("\"$nome\" apagado") }
+                                .onFailure { snackbar.showSnackbar("Erro: ${it.message}") }
+                        }
+                    }
+                ) {
+                    Text("Apagar", color = Color(0xFFEF5350), fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
                     Text("Cancelar", color = TextSecondary)
                 }
             }

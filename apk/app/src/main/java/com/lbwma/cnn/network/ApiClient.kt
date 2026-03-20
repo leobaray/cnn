@@ -138,6 +138,48 @@ object ApiClient {
         }
     }
 
+    suspend fun renameConversor(nomeAtual: String, novoNome: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val request = authRequest("$baseUrl/conversores/${encode(nomeAtual)}?novo_nome=${encode(novoNome)}")
+                .patch("".toRequestBody(null))
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val msg = when (response.code) {
+                        404 -> "Conversor não encontrado"
+                        409 -> "Já existe um conversor com esse nome"
+                        400 -> "Nome inválido"
+                        else -> "Erro ${response.code}"
+                    }
+                    return@withContext Result.failure(Exception(msg))
+                }
+                Result.success(Unit)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteConversor(nome: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val request = authRequest("$baseUrl/conversores/${encode(nome)}")
+                .delete()
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val msg = when (response.code) {
+                        404 -> "Conversor não encontrado"
+                        else -> "Erro ${response.code}"
+                    }
+                    return@withContext Result.failure(Exception(msg))
+                }
+                Result.success(Unit)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteFoto(nome: String, arquivo: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val request = authRequest("$baseUrl/conversores/${encode(nome)}/fotos/${encode(arquivo)}")

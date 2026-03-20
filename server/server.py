@@ -6,6 +6,7 @@ Recebe requisições do APK Android e gerencia as pastas de dataset localmente.
 
 import io
 import re
+import shutil
 import time
 from pathlib import Path
 
@@ -19,7 +20,7 @@ DATASET_DIR = BASE_DIR / "ml" / "datasets"
 DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
 APK_PATH = Path(__file__).resolve().parent / "app.apk"
-APP_VERSION_CODE = 1
+APP_VERSION_CODE = 11
 
 ALLOWED_EXT = {"jpg", "jpeg", "png", "webp", "bmp"}
 PLACEHOLDER_NAME = "00.jpg"
@@ -35,7 +36,7 @@ _SIGNATURES = {
 # Credenciais fixas
 USERS = {
     ***REMOVED***,
-    "matheus": "1235"
+    ***REMOVED***
 }
 
 app = FastAPI(title="CNN Fotos API")
@@ -84,6 +85,32 @@ def criar_conversor(nome: str, _user: str = Depends(auth)):
     pasta.mkdir(parents=True, exist_ok=True)
     (pasta / PLACEHOLDER_NAME).touch()
     return {"criado": nome}
+
+
+@app.patch("/conversores/{conversor}")
+def renomear_conversor(conversor: str, novo_nome: str, _user: str = Depends(auth)):
+    conversor = sanitize(conversor)
+    novo_nome = sanitize(novo_nome)
+    if not novo_nome:
+        raise HTTPException(400, "Novo nome inválido")
+    pasta_atual = DATASET_DIR / conversor
+    if not pasta_atual.exists():
+        raise HTTPException(404, "Conversor não encontrado")
+    pasta_nova = DATASET_DIR / novo_nome
+    if pasta_nova.exists():
+        raise HTTPException(409, "Já existe um conversor com esse nome")
+    pasta_atual.rename(pasta_nova)
+    return {"renomeado": {"de": conversor, "para": novo_nome}}
+
+
+@app.delete("/conversores/{conversor}")
+def deletar_conversor(conversor: str, _user: str = Depends(auth)):
+    conversor = sanitize(conversor)
+    pasta = DATASET_DIR / conversor
+    if not pasta.exists():
+        raise HTTPException(404, "Conversor não encontrado")
+    shutil.rmtree(pasta)
+    return {"deletado": conversor}
 
 
 @app.get("/conversores/{conversor}/fotos")

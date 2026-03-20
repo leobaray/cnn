@@ -13,8 +13,8 @@ android {
         applicationId = "com.lbwma.cnn"
         minSdk = 33
         targetSdk = 36
-        versionCode = 7
-        versionName = "3.9"
+        versionCode = 13
+        versionName = "5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

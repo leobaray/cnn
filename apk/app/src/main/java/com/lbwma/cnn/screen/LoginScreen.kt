@@ -78,6 +78,7 @@ import com.lbwma.cnn.ui.theme.Dark15
 import com.lbwma.cnn.ui.theme.Dark20
 import com.lbwma.cnn.ui.theme.GlassBorder
 import com.lbwma.cnn.ui.theme.GlassHighlight
+import com.lbwma.cnn.ui.theme.OutfitBold
 import com.lbwma.cnn.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -268,6 +269,15 @@ fun LoginScreen(onLoginSuccess: () -> Unit, sessionExpired: Boolean = false) {
                             }
                     )
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "LBWMA",
+                            fontFamily = OutfitBold,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = TextSecondary,
+                            letterSpacing = 6.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
                         Text(
                             "CNN",
                             fontSize = 56.sp,
