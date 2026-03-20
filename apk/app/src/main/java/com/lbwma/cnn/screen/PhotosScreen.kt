@@ -1,8 +1,13 @@
 package com.lbwma.cnn.screen
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -78,6 +83,7 @@ import com.lbwma.cnn.network.ApiClient
 import com.lbwma.cnn.network.Foto
 import com.lbwma.cnn.network.ThumbnailCache
 import com.lbwma.cnn.network.UploadManager
+import com.lbwma.cnn.network.UploadState
 import com.lbwma.cnn.ui.theme.Cyan40
 import com.lbwma.cnn.ui.theme.Dark00
 import com.lbwma.cnn.ui.theme.Dark10
@@ -108,8 +114,11 @@ fun PhotosScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
-    val uploadState by UploadManager.state.collectAsState()
+    val uploadState by UploadManager.stateFor(conversorName).collectAsState(UploadState())
     var hadUploads by remember { mutableStateOf(uploadState.pending > 0) }
+    var showPermissionDialog by remember { mutableStateOf(false) }
+    var permanentlyDenied by remember { mutableStateOf(false) }
+    val activity = context as Activity
 
     fun loadFotos(isRefresh: Boolean = false) {
         if (isRefresh) refreshing = true else loading = true
@@ -137,7 +146,7 @@ fun PhotosScreen(
     LaunchedEffect(uploadState.lastError) {
         val err = uploadState.lastError ?: return@LaunchedEffect
         snackbar.showSnackbar(err)
-        UploadManager.clearError()
+        UploadManager.clearError(conversorName)
     }
 
     LaunchedEffect(filesToUpload) {
@@ -163,7 +172,10 @@ fun PhotosScreen(
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) onOpenCamera()
-        else scope.launch { snackbar.showSnackbar("Permissão de câmera negada") }
+        else {
+            permanentlyDenied = !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.CAMERA)
+            showPermissionDialog = true
+        }
     }
 
     LaunchedEffect(Unit) { loadFotos() }
@@ -398,6 +410,54 @@ fun PhotosScreen(
                 }
             }
         }
+    }
+
+    if (showPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            containerColor = Dark10,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    "Câmera necessária",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    if (permanentlyDenied)
+                        "Para usar o aplicativo é necessário o acesso à câmera. Abra as configurações e conceda a permissão."
+                    else
+                        "Para usar o aplicativo é necessário o acesso à câmera. Conceda a permissão para continuar.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPermissionDialog = false
+                    if (permanentlyDenied) {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(intent)
+                    } else {
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
+                }) {
+                    Text(
+                        if (permanentlyDenied) "Abrir configurações" else "Tentar novamente",
+                        color = Cyan40,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionDialog = false }) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            }
+        )
     }
 
     deleteTarget?.let { arquivo ->

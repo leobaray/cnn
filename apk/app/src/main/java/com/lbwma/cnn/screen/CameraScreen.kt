@@ -87,7 +87,7 @@ fun CameraScreen(
     onCancel: () -> Unit
 ) {
     // ---- Configuração do modo rajada (arrastar para cima para ativar) ----
-    val burstIntervalMs = 250L   // intervalo entre fotos no modo rajada (ms)
+    val burstIntervalMs = 380L   // intervalo entre fotos no modo rajada (ms)
     // -----------------------------------------------------------------------
 
     val context = LocalContext.current
@@ -184,7 +184,8 @@ fun CameraScreen(
         executor.execute {
             try {
                 val prefix = if (filtroId != null) "f%02d".format(filtroId) else "batch"
-                val file = File(context.cacheDir, "${prefix}_${System.currentTimeMillis()}.jpg")
+                val pendingDir = File(context.filesDir, "pending_review").apply { mkdirs() }
+                val file = File(pendingDir, "${prefix}_${System.currentTimeMillis()}.jpg")
                 FileOutputStream(file).use { out ->
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
                 }
