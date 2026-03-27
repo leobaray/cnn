@@ -5,15 +5,26 @@ Recebe requisições do APK Android e gerencia as pastas de dataset localmente.
 """
 
 import io
+import json
+import logging
 import re
 import shutil
+import sys
 import time
 from pathlib import Path
 
+import numpy as np
+import torch
+import torch.nn.functional as F
 from fastapi import FastAPI, UploadFile, HTTPException, Depends
 from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from PIL import Image
+from torchvision import transforms
+
+# Adiciona o diretório ml ao path para importar train
+ML_DIR = Path(__file__).resolve().parent.parent / "ml"
+sys.path.insert(0, str(ML_DIR))
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATASET_DIR = BASE_DIR / "ml" / "datasets"
@@ -206,6 +217,135 @@ def baixar_foto(conversor: str, arquivo: str, _user: str = Depends(auth)):
     if not caminho.exists() or not caminho.is_file():
         raise HTTPException(404, "Foto não encontrada")
     return FileResponse(caminho)
+
+
+# --- Inferência ---
+
+MODEL_DIR = ML_DIR / "output" / "models"
+MEAN = np.array([0.485, 0.456, 0.406])
+STD = np.array([0.229, 0.224, 0.225])
+
+_infer_state: dict = {}
+
+log = logging.getLogger("uvicorn.error")
+
+
+def _load_model():
+    """Lazy load do modelo na primeira chamada."""
+    if _infer_state.get("model") is not None:
+        return
+
+    meta_path = MODEL_DIR / "meta.json"
+    model_path = MODEL_DIR / "best_model.pt"
+
+    if not meta_path.exists() or not model_path.exists():
+        raise HTTPException(503, "Modelo não disponível — treine primeiro")
+
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+
+    from train import build_model
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = build_model(meta["num_classes"], device)
+    model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+    model.eval()
+
+    transform = transforms.Compose([
+        transforms.Resize(meta["img_size"], interpolation=transforms.InterpolationMode.BICUBIC),
+        transforms.CenterCrop(meta["img_size"]),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=MEAN.tolist(), std=STD.tolist()),
+    ])
+
+    _infer_state.update({
+        "model": model,
+        "device": device,
+        "transform": transform,
+        "class_names": meta["class_names"],
+        "img_size": meta["img_size"],
+        "num_classes": meta["num_classes"],
+    })
+    log.info(f"Modelo carregado | {device} | {meta['num_classes']} classes | {meta['img_size']}px")
+
+
+@torch.no_grad()
+def _predict(img: Image.Image, tta: bool = False):
+    """Roda inferência simples ou com TTA (4 flips)."""
+    s = _infer_state
+    model, device, transform = s["model"], s["device"], s["transform"]
+
+    if not tta:
+        tensor = transform(img).unsqueeze(0).to(device)
+        if device.type == "cuda":
+            tensor = tensor.to(memory_format=torch.channels_last)
+        logits = model(tensor)
+        probs = F.softmax(logits, dim=1)[0].cpu().numpy()
+    else:
+        imgs = [
+            img,
+            img.transpose(Image.Transpose.FLIP_LEFT_RIGHT),
+            img.transpose(Image.Transpose.FLIP_TOP_BOTTOM),
+            img.transpose(Image.Transpose.FLIP_LEFT_RIGHT).transpose(Image.Transpose.FLIP_TOP_BOTTOM),
+        ]
+        all_probs = []
+        for aug in imgs:
+            tensor = transform(aug).unsqueeze(0).to(device)
+            if device.type == "cuda":
+                tensor = tensor.to(memory_format=torch.channels_last)
+            logits = model(tensor)
+            all_probs.append(F.softmax(logits, dim=1)[0].cpu().numpy())
+        probs = np.mean(all_probs, axis=0)
+
+    return probs
+
+
+@app.post("/infer")
+async def inferir(foto: UploadFile, tta: bool = False, _user: str = Depends(auth)):
+    _load_model()
+
+    conteudo = await foto.read()
+    try:
+        img = Image.open(io.BytesIO(conteudo)).convert("RGB")
+    except Exception:
+        raise HTTPException(400, "Imagem inválida")
+
+    probs = _predict(img, tta=tta)
+
+    top_k = min(len(_infer_state["class_names"]), 5)
+    top_idx = np.argsort(probs)[::-1][:top_k]
+
+    top5 = []
+    for idx in top_idx:
+        top5.append({
+            "class": _infer_state["class_names"][idx],
+            "confidence": round(float(probs[idx]) * 100, 1),
+        })
+
+    return {
+        "class": top5[0]["class"],
+        "confidence": top5[0]["confidence"],
+        "tta": tta,
+        "top5": top5,
+    }
+
+
+@app.get("/infer/status")
+def infer_status(_user: str = Depends(auth)):
+    meta_path = MODEL_DIR / "meta.json"
+    if not meta_path.exists():
+        return {"ready": False, "reason": "modelo não treinado"}
+
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+
+    return {
+        "ready": True,
+        "loaded": _infer_state.get("model") is not None,
+        "num_classes": meta["num_classes"],
+        "img_size": meta["img_size"],
+        "class_names": meta["class_names"],
+    }
 
 
 @app.get("/app/version")

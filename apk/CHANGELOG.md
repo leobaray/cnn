@@ -1,5 +1,24 @@
 # Changelog
 
+## [6.0] - 2026-03-25
+### Added
+- **IdentifyScreen** — nova tela inicial pos-login com camera fullscreen para identificacao de conversores via IA
+- Captura de foto com crop quadrado 512x512, envio para endpoint `/infer` com TTA (test-time augmentation)
+- Exibicao de resultado principal (classe + confianca) e **top-5 predicoes** com barras de confianca animadas
+- Verificacao de status do modelo na entrada (aviso se modelo nao treinado)
+- Crosshair animado no modo de visao da camera
+- **Landing page** com icone pulsante, status do modelo (pronto/nao treinado/verificando) e botao "Abrir Camera"
+- **Pedido de permissao de camera** com dialogo de retry e redirecionamento para configuracoes se negado permanentemente
+- Botao **"Area de Treino"** para acessar a area de coleta/treino (fluxo anterior)
+- Novos endpoints no ApiClient: `infer()` (POST /infer) e `inferStatus()` (GET /infer/status)
+- Data classes `InferResult` e `InferStatus` no ApiClient
+
+### Changed
+- **Navegacao pos-login agora vai para IdentifyScreen** em vez de ConvertersScreen
+- Fluxo de navegacao: Login → Identify (landing) → Camera → Converters (via botao "Area de Treino")
+- BackHandler atualizado: Converters volta para Identify, Identify volta para Login
+- Camera so abre quando usuario clica em "Abrir Camera" (nao mais automaticamente)
+
 ## [5.0] - 2026-03-20
 ### Added
 - Opção de **renomear** conversor via long press no card → Renomear
