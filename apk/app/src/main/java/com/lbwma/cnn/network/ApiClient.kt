@@ -213,6 +213,60 @@ object ApiClient {
         }
     }
 
+    data class InferResult(
+        val classe: String,
+        val confianca: Float,
+        val top5: List<Pair<String, Float>>
+    )
+
+    suspend fun infer(imageBytes: ByteArray, fileName: String, tta: Boolean = false): Result<InferResult> = withContext(Dispatchers.IO) {
+        try {
+            val body = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("foto", fileName, imageBytes.toRequestBody("image/*".toMediaType()))
+                .build()
+            val url = if (tta) "$baseUrl/infer?tta=true" else "$baseUrl/infer"
+            val request = authRequest(url).post(body).build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext Result.failure(Exception("Erro ${response.code}"))
+                val json = JSONObject(response.body!!.string())
+                val top5Array = json.getJSONArray("top5")
+                val top5 = (0 until top5Array.length()).map { i ->
+                    val item = top5Array.getJSONObject(i)
+                    item.getString("class") to item.getDouble("confidence").toFloat()
+                }
+                Result.success(InferResult(
+                    classe = json.getString("class"),
+                    confianca = json.getDouble("confidence").toFloat(),
+                    top5 = top5
+                ))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    data class InferStatus(val ready: Boolean, val numClasses: Int, val classNames: List<String>)
+
+    suspend fun inferStatus(): Result<InferStatus> = withContext(Dispatchers.IO) {
+        try {
+            val request = authRequest("$baseUrl/infer/status").get().build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext Result.failure(Exception("Erro ${response.code}"))
+                val json = JSONObject(response.body!!.string())
+                val names = json.optJSONArray("class_names")
+                val classNames = if (names != null) (0 until names.length()).map { names.getString(it) } else emptyList()
+                Result.success(InferStatus(
+                    ready = json.getBoolean("ready"),
+                    numClasses = json.optInt("num_classes", 0),
+                    classNames = classNames
+                ))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun getApkDownloadUrl(): String = "$baseUrl/app/download"
 
     fun getAuthHeader(): String = credentials

@@ -59,6 +59,7 @@ import com.lbwma.cnn.screen.CameraScreen
 import com.lbwma.cnn.screen.ConvertersScreen
 import com.lbwma.cnn.screen.FilterGridScreen
 import com.lbwma.cnn.screen.FullPhotoScreen
+import com.lbwma.cnn.screen.IdentifyScreen
 import com.lbwma.cnn.screen.LoginScreen
 import com.lbwma.cnn.screen.PhotosScreen
 import com.lbwma.cnn.screen.ReviewScreen
@@ -73,6 +74,7 @@ private const val SESSION_TIMEOUT_MS = 10 * 60 * 1000L // 10 minutos
 
 sealed class Screen {
     data object Login : Screen()
+    data object Identify : Screen()
     data object Converters : Screen()
     data class Photos(val name: String, val filterPrefix: String? = null) : Screen()
     data class FilterGrid(val conversorName: String) : Screen()
@@ -82,6 +84,7 @@ sealed class Screen {
 
     val depth: Int get() = when (this) {
         is Login -> 0
+        is Identify -> 1
         is Converters -> 1
         is Photos -> 2
         is FilterGrid -> 2
@@ -160,7 +163,8 @@ class MainActivity : ComponentActivity() {
                         is Screen.Photos -> if (s.filterPrefix != null) Screen.FilterGrid(s.name) else Screen.Converters
                         is Screen.FilterGrid -> Screen.Converters
                         is Screen.Review -> Screen.FilterGrid(s.conversorName)
-                        is Screen.Converters -> Screen.Login
+                        is Screen.Converters -> Screen.Identify
+                        is Screen.Identify -> Screen.Login
                         else -> screen
                     }
                 }
@@ -200,8 +204,11 @@ class MainActivity : ComponentActivity() {
                         previousDepth = current.depth
                         when (current) {
                             Screen.Login -> LoginScreen(
-                                onLoginSuccess = { sessionExpired = false; screen = Screen.Converters },
+                                onLoginSuccess = { sessionExpired = false; screen = Screen.Identify },
                                 sessionExpired = sessionExpired
+                            )
+                            Screen.Identify -> IdentifyScreen(
+                                onGoToTraining = { screen = Screen.Converters }
                             )
                             Screen.Converters -> ConvertersScreen(
                                 onConversorClick = { name ->
