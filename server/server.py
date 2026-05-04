@@ -31,7 +31,7 @@ DATASET_DIR = BASE_DIR / "ml" / "datasets"
 DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
 APK_PATH = Path(__file__).resolve().parent / "app.apk"
-APP_VERSION_CODE = 11
+APP_VERSION_CODE = 14
 
 ALLOWED_EXT = {"jpg", "jpeg", "png", "webp", "bmp"}
 PLACEHOLDER_NAME = "00.jpg"
@@ -271,33 +271,31 @@ def _load_model():
 
 @torch.no_grad()
 def _predict(img: Image.Image, tta: bool = False):
-    """Roda inferência simples ou com TTA (4 flips)."""
+    """Roda inferência simples ou com TTA (4 flips + 3 rotações = 7 augs, igual ao train.py)."""
     s = _infer_state
     model, device, transform = s["model"], s["device"], s["transform"]
 
-    if not tta:
-        tensor = transform(img).unsqueeze(0).to(device)
-        if device.type == "cuda":
-            tensor = tensor.to(memory_format=torch.channels_last)
-        logits = model(tensor)
-        probs = F.softmax(logits, dim=1)[0].cpu().numpy()
-    else:
-        imgs = [
-            img,
-            img.transpose(Image.Transpose.FLIP_LEFT_RIGHT),
-            img.transpose(Image.Transpose.FLIP_TOP_BOTTOM),
-            img.transpose(Image.Transpose.FLIP_LEFT_RIGHT).transpose(Image.Transpose.FLIP_TOP_BOTTOM),
-        ]
-        all_probs = []
-        for aug in imgs:
-            tensor = transform(aug).unsqueeze(0).to(device)
-            if device.type == "cuda":
-                tensor = tensor.to(memory_format=torch.channels_last)
-            logits = model(tensor)
-            all_probs.append(F.softmax(logits, dim=1)[0].cpu().numpy())
-        probs = np.mean(all_probs, axis=0)
+    tensor = transform(img).unsqueeze(0).to(device)
+    if device.type == "cuda":
+        tensor = tensor.to(memory_format=torch.channels_last)
 
-    return probs
+    if not tta:
+        logits = model(tensor)
+        return F.softmax(logits, dim=1)[0].cpu().numpy()
+
+    augs = [
+        tensor,
+        torch.flip(tensor, [-1]),
+        torch.flip(tensor, [-2]),
+        torch.flip(tensor, [-1, -2]),
+        torch.rot90(tensor, 1, [-2, -1]),
+        torch.rot90(tensor, 2, [-2, -1]),
+        torch.rot90(tensor, 3, [-2, -1]),
+    ]
+    probs_sum = torch.zeros(1, _infer_state["num_classes"], device=device)
+    for aug in augs:
+        probs_sum += F.softmax(model(aug), dim=1)
+    return (probs_sum / len(augs))[0].cpu().numpy()
 
 
 @app.post("/infer")
