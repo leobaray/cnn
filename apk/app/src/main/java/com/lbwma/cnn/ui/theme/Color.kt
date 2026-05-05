@@ -2,36 +2,55 @@ package com.lbwma.cnn.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Superficies — profundidade em camadas
-val Dark00 = Color(0xFF080C10)
-val Dark05 = Color(0xFF0E1419)
-val Dark10 = Color(0xFF141C26)
-val Dark15 = Color(0xFF1A2533)
-val Dark20 = Color(0xFF212F40)
-val Dark30 = Color(0xFF2E4052)
+// ============== SUPERFICIES — sistema de profundidade refinado ==============
+// Camadas escuras com tom azul-petroleo profundo, contraste suave e progressivo
+val Dark00 = Color(0xFF05080C)   // background absoluto
+val Dark05 = Color(0xFF0A0F16)   // surface base
+val Dark10 = Color(0xFF111823)   // card base
+val Dark15 = Color(0xFF18222F)   // card elevated
+val Dark20 = Color(0xFF1F2B3C)   // outline / divider
+val Dark30 = Color(0xFF2A3A50)   // hover state
+val Dark40 = Color(0xFF3A4D68)   // emphasis
 
-// Acento primario — cyan vibrante
-val Cyan40 = Color(0xFF4FC3F7)
-val Cyan60 = Color(0xFF81D4FA)
-val Cyan80 = Color(0xFFB3E5FC)
-val CyanDark = Color(0xFF0277BD)
+// ============== ACENTO PRIMARIO — cyan eletrico ==============
+val Cyan40 = Color(0xFF22D3EE)   // primary vibrant — eletrico
+val Cyan60 = Color(0xFF67E8F9)   // primary light
+val Cyan80 = Color(0xFFA5F3FC)   // primary lightest
+val CyanDark = Color(0xFF0E7490) // primary dark
+val CyanGlow = Color(0xFF06B6D4) // glow halftone
 
-// Acento secundario — tons quentes para contraste
-val Amber = Color(0xFFFFB74D)
-val AmberDark = Color(0xFFFF8F00)
+// ============== ACENTO SECUNDARIO — violeta e magenta para gradientes ==============
+val Violet40 = Color(0xFF8B5CF6) // gradient partner
+val Violet60 = Color(0xFFA78BFA)
+val Magenta40 = Color(0xFFEC4899)
+val Indigo40 = Color(0xFF6366F1)
 
-// Texto
-val TextPrimary = Color(0xFFE8ECF1)
-val TextSecondary = Color(0xFF7B8FA3)
-val TextDisabled = Color(0xFF3E4F63)
+// ============== ACENTO QUENTE ==============
+val Amber = Color(0xFFFBBF24)
+val AmberDark = Color(0xFFF59E0B)
+val Orange = Color(0xFFFB923C)
 
-// Semanticas
-val Success = Color(0xFF4DB6AC)
-val Error = Color(0xFFEF5350)
-val ErrorDark = Color(0xFF8B1A1A)
+// ============== TEXTO — escala otimizada para dark ==============
+val TextPrimary = Color(0xFFF1F5F9)    // alto contraste
+val TextSecondary = Color(0xFF94A3B8)  // legivel mas suave
+val TextTertiary = Color(0xFF64748B)   // hint
+val TextDisabled = Color(0xFF334155)
 
-// Overlay e glass
+// ============== SEMANTICAS ==============
+val Success = Color(0xFF10B981)        // emerald
+val SuccessLight = Color(0xFF34D399)
+val Error = Color(0xFFF43F5E)          // rose
+val ErrorDark = Color(0xFF881337)
+val Warning = Color(0xFFF59E0B)
+
+// ============== GLASS / OVERLAY — feel premium ==============
+val GlassBorder = Color(0x1FFFFFFF)        // borda translucida sutil
+val GlassBorderStrong = Color(0x33FFFFFF)  // borda mais visivel
+val GlassHighlight = Color(0x14FFFFFF)     // brilho interno
+val GlassFog = Color(0x0AFFFFFF)           // fog quase invisivel
 val OverlayLight = Color(0x18FFFFFF)
 val OverlayDark = Color(0xCC000000)
-val GlassBorder = Color(0x22FFFFFF)
-val GlassHighlight = Color(0x0CFFFFFF)
+val ScrimDark = Color(0xE6000000)
+
+// ============== CORES ESPECIAIS PARA ON-DARK ==============
+val OnPrimaryDark = Color(0xFF03131A)  // texto sobre cyan

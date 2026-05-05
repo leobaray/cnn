@@ -12,6 +12,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +71,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.lbwma.cnn.BiometricHelper
 import com.lbwma.cnn.network.ApiClient
+import com.lbwma.cnn.ui.theme.Dark05
 import com.lbwma.cnn.ui.theme.Cyan40
 import com.lbwma.cnn.ui.theme.Cyan60
 import com.lbwma.cnn.ui.theme.Dark00
@@ -250,17 +252,18 @@ fun LoginScreen(onLoginSuccess: () -> Unit, sessionExpired: Boolean = false) {
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Branding
+                // Branding com gradient hero
                 Box(contentAlignment = Alignment.Center) {
+                    // Halos concentricos
                     Box(
                         modifier = Modifier
-                            .size(240.dp)
+                            .size(280.dp)
                             .drawBehind {
                                 drawCircle(
                                     brush = Brush.radialGradient(
                                         colors = listOf(
-                                            Cyan40.copy(alpha = 0.15f),
-                                            Cyan40.copy(alpha = 0.03f),
+                                            Cyan40.copy(alpha = 0.22f),
+                                            com.lbwma.cnn.ui.theme.Violet40.copy(alpha = 0.10f),
                                             Color.Transparent
                                         )
                                     ),
@@ -273,43 +276,63 @@ fun LoginScreen(onLoginSuccess: () -> Unit, sessionExpired: Boolean = false) {
                             "LBWMA",
                             fontFamily = OutfitBold,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
+                            fontSize = 16.sp,
                             color = TextSecondary,
-                            letterSpacing = 6.sp
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "CNN",
-                            fontSize = 56.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Cyan40,
                             letterSpacing = 8.sp
                         )
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(12.dp))
+                        // CNN com gradient hero
+                        Box {
+                            Text(
+                                "CNN",
+                                fontSize = 68.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.Transparent,
+                                letterSpacing = 4.sp,
+                                style = MaterialTheme.typography.displayLarge.copy(
+                                    brush = com.lbwma.cnn.ui.heroGradient(),
+                                    fontSize = 68.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 4.sp
+                                )
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
                         Text(
-                            "CONVERSORES",
-                            style = MaterialTheme.typography.labelLarge,
+                            "C O N V E R S O R E S",
+                            style = MaterialTheme.typography.labelMedium,
                             color = TextSecondary,
-                            letterSpacing = 6.sp,
-                            fontSize = 13.sp
+                            letterSpacing = 4.sp,
+                            fontSize = 11.sp
                         )
                     }
                 }
 
                 Spacer(Modifier.height(44.dp))
 
-                // Glass card
+                // Glass card premium
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(24.dp))
-                        .border(1.dp, GlassBorder, RoundedCornerShape(24.dp))
+                        .clip(RoundedCornerShape(28.dp))
+                        .border(
+                            1.dp,
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    GlassHighlight,
+                                    GlassBorder,
+                                    Cyan40.copy(alpha = 0.12f),
+                                    GlassBorder,
+                                )
+                            ),
+                            RoundedCornerShape(28.dp)
+                        )
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
                                     GlassHighlight,
                                     Dark10.copy(alpha = 0.95f),
-                                    Dark10
+                                    Dark05.copy(alpha = 0.95f)
                                 )
                             )
                         )
@@ -412,26 +435,24 @@ fun LoginScreen(onLoginSuccess: () -> Unit, sessionExpired: Boolean = false) {
 
                     Spacer(Modifier.height(28.dp))
 
-                    Button(
-                        onClick = { doLogin() },
-                        enabled = !loading && username.isNotBlank() && password.isNotBlank(),
+                    val canLogin = !loading && username.isNotBlank() && password.isNotBlank()
+                    Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(54.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Cyan40,
-                            disabledContainerColor = Dark20
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(
-                            defaultElevation = 8.dp,
-                            pressedElevation = 2.dp,
-                            disabledElevation = 0.dp
-                        )
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                if (canLogin) com.lbwma.cnn.ui.primaryGradient()
+                                else Brush.horizontalGradient(listOf(Dark20, Dark20))
+                            )
+                            .let {
+                                if (canLogin) it.clickable { doLogin() } else it
+                            }
                     ) {
                         if (loading) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp),
+                                modifier = Modifier.size(24.dp),
                                 strokeWidth = 2.5.dp,
                                 color = Color(0xFF00131E)
                             )
@@ -439,8 +460,9 @@ fun LoginScreen(onLoginSuccess: () -> Unit, sessionExpired: Boolean = false) {
                             Text(
                                 "ENTRAR",
                                 style = MaterialTheme.typography.labelLarge,
-                                letterSpacing = 3.sp,
-                                fontWeight = FontWeight.Bold
+                                letterSpacing = 4.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (canLogin) Color(0xFF00131E) else TextSecondary
                             )
                         }
                     }
@@ -513,8 +535,13 @@ fun LoginScreen(onLoginSuccess: () -> Unit, sessionExpired: Boolean = false) {
 
                 Spacer(Modifier.height(32.dp))
 
+                val versionName = remember(context) {
+                    try {
+                        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
+                    } catch (_: Exception) { "" }
+                }
                 Text(
-                    "v1.0",
+                    if (versionName.isNotEmpty()) "v$versionName" else "",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextSecondary.copy(alpha = 0.4f)
                 )

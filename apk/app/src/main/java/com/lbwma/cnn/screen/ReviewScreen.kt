@@ -260,26 +260,36 @@ fun ReviewScreen(
                             .navigationBarsPadding()
                             .padding(horizontal = 20.dp, vertical = 16.dp)
                     ) {
-                        Button(
-                            onClick = {
-                                swipeFiles.addAll(gridFiles)
-                                currentIndex = 0
-                                phase = "swipe"
-                            },
-                            enabled = gridFiles.isNotEmpty(),
+                        val canReview = gridFiles.isNotEmpty()
+                        Box(
+                            contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(54.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Cyan40,
-                                disabledContainerColor = Dark10
-                            )
+                                .height(56.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    if (canReview) com.lbwma.cnn.ui.primaryGradient()
+                                    else Brush.horizontalGradient(listOf(Dark10, Dark10))
+                                )
+                                .border(
+                                    1.dp,
+                                    if (canReview) Color.White.copy(alpha = 0.2f) else Color.Transparent,
+                                    RoundedCornerShape(16.dp)
+                                )
+                                .let {
+                                    if (canReview) it.clickable {
+                                        swipeFiles.addAll(gridFiles)
+                                        currentIndex = 0
+                                        phase = "swipe"
+                                    } else it
+                                }
                         ) {
                             Text(
                                 "Revisar ${gridFiles.size} fotos",
                                 fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
+                                letterSpacing = 1.sp,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (canReview) com.lbwma.cnn.ui.theme.OnPrimaryDark else TextSecondary
                             )
                         }
                     }

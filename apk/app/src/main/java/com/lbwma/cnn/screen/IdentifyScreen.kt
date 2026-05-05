@@ -30,6 +30,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,6 +85,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.lbwma.cnn.model.IdentificationHistory
 import com.lbwma.cnn.network.ApiClient
 import com.lbwma.cnn.ui.theme.Amber
 import com.lbwma.cnn.ui.theme.Cyan40
@@ -109,7 +112,8 @@ private val barColors = listOf(
 
 @Composable
 fun IdentifyScreen(
-    onGoToTraining: () -> Unit
+    onGoToTraining: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val activity = context as Activity
@@ -226,7 +230,13 @@ fun IdentifyScreen(
                 val bytes = baos.toByteArray()
 
                 ApiClient.infer(bytes, "identify_${System.currentTimeMillis()}.jpg", tta = true)
-                    .onSuccess { result = it }
+                    .onSuccess {
+                        result = it
+                        IdentificationHistory.add(it.classe, it.confianca)
+                        try {
+                            vibrator?.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+                        } catch (_: Exception) {}
+                    }
                     .onFailure { errorMsg = it.message ?: "Erro desconhecido" }
             } catch (e: Exception) {
                 errorMsg = e.message ?: "Erro ao processar imagem"
@@ -370,44 +380,84 @@ fun IdentifyScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(20.dp))
+                                    .clip(RoundedCornerShape(24.dp))
                                     .background(
                                         Brush.verticalGradient(
-                                            listOf(Dark10.copy(alpha = 0.95f), Dark05.copy(alpha = 0.95f))
+                                            listOf(
+                                                Dark15.copy(alpha = 0.97f),
+                                                Dark10.copy(alpha = 0.97f),
+                                                Dark05.copy(alpha = 0.97f)
+                                            )
                                         )
                                     )
-                                    .border(1.dp, GlassBorder, RoundedCornerShape(20.dp))
+                                    .border(
+                                        1.dp,
+                                        Brush.linearGradient(
+                                            listOf(
+                                                Cyan40.copy(alpha = 0.4f),
+                                                GlassBorder,
+                                                com.lbwma.cnn.ui.theme.Violet40.copy(alpha = 0.3f)
+                                            )
+                                        ),
+                                        RoundedCornerShape(24.dp)
+                                    )
                                     .padding(20.dp)
                             ) {
                                 Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.Psychology,
-                                            contentDescription = null,
-                                            tint = Cyan40,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                        Spacer(Modifier.width(10.dp))
-                                        Text(
-                                            "Resultado",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = TextSecondary
-                                        )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(com.lbwma.cnn.ui.heroGradient())
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Psychology,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                "IDENTIFICADO",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Cyan40,
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 1.5.sp
+                                            )
+                                        }
+                                        // Confianca badge
+                                        val confColor = if (res.confianca >= 80f) Success else Cyan60
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(confColor.copy(alpha = 0.15f))
+                                                .border(1.dp, confColor.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Text(
+                                                "${res.confianca.toInt()}%",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = confColor,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
-                                    Spacer(Modifier.height(12.dp))
+                                    Spacer(Modifier.height(14.dp))
                                     Text(
                                         res.classe,
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
+                                        style = MaterialTheme.typography.headlineMedium.copy(
+                                            brush = com.lbwma.cnn.ui.heroGradient()
+                                        ),
+                                        fontWeight = FontWeight.Bold
                                     )
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        "${res.confianca}% de confianca",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (res.confianca >= 80f) Success else Cyan60
-                                    )
-                                    Spacer(Modifier.height(16.dp))
+                                    Spacer(Modifier.height(18.dp))
                                     res.top5.forEachIndexed { idx, (name, conf) ->
                                         ConfidenceBar(
                                             name = name,
@@ -449,36 +499,65 @@ fun IdentifyScreen(
 
                 // Capture / analyzing
                 if (analyzing) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(82.dp)) {
-                        CircularProgressIndicator(color = Cyan40, strokeWidth = 3.dp, modifier = Modifier.size(82.dp))
-                        Icon(Icons.Default.Psychology, null, tint = Cyan40, modifier = Modifier.size(32.dp))
-                    }
-                } else {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(82.dp)) {
-                        Box(
-                            Modifier
-                                .size(82.dp)
-                                .border(
-                                    3.dp,
-                                    Brush.sweepGradient(
-                                        listOf(Cyan40, Cyan40.copy(alpha = 0.4f), Cyan40, Cyan40.copy(alpha = 0.4f), Cyan40)
-                                    ),
-                                    CircleShape
-                                )
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(88.dp)) {
+                        CircularProgressIndicator(
+                            color = Cyan40,
+                            strokeWidth = 3.dp,
+                            modifier = Modifier.size(88.dp)
                         )
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(66.dp)
+                                .size(64.dp)
                                 .clip(CircleShape)
-                                .background(Brush.radialGradient(listOf(Cyan40, Cyan40.copy(alpha = 0.85f))))
+                                .background(com.lbwma.cnn.ui.heroGradient())
+                        ) {
+                            Icon(Icons.Default.Psychology, null, tint = Color.White, modifier = Modifier.size(28.dp))
+                        }
+                    }
+                } else {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(88.dp)) {
+                        // Halo glow
+                        Box(
+                            Modifier
+                                .size(110.dp)
+                                .background(
+                                    Brush.radialGradient(listOf(Cyan40.copy(alpha = 0.35f), Color.Transparent)),
+                                    CircleShape
+                                )
+                        )
+                        // Sweep ring
+                        Box(
+                            Modifier
+                                .size(88.dp)
+                                .border(
+                                    3.dp,
+                                    Brush.sweepGradient(
+                                        listOf(
+                                            Cyan40,
+                                            com.lbwma.cnn.ui.theme.Violet40,
+                                            com.lbwma.cnn.ui.theme.Magenta40,
+                                            Cyan40
+                                        )
+                                    ),
+                                    CircleShape
+                                )
+                        )
+                        // Inner button
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(70.dp)
+                                .clip(CircleShape)
+                                .background(com.lbwma.cnn.ui.primaryGradient())
+                                .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
                                 .clickable { captureAndInfer() }
                         ) {
                             Icon(
                                 Icons.Default.CameraAlt,
                                 contentDescription = "Identificar",
-                                tint = Color(0xFF00131E),
-                                modifier = Modifier.size(28.dp)
+                                tint = com.lbwma.cnn.ui.theme.OnPrimaryDark,
+                                modifier = Modifier.size(30.dp)
                             )
                         }
                     }
@@ -505,29 +584,8 @@ fun IdentifyScreen(
                 Spacer(Modifier.height(8.dp))
             }
         } else {
-            // ===== LANDING PAGE =====
-            // Gradient background
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Dark00, Dark05, Dark10)
-                        )
-                    )
-            )
-
-            // Decorative glow
-            Box(
-                Modifier
-                    .size(300.dp)
-                    .align(Alignment.Center)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(Cyan40.copy(alpha = 0.06f), Color.Transparent)
-                        )
-                    )
-            )
+            // ===== LANDING PAGE — mesh ambient =====
+            com.lbwma.cnn.ui.MeshAmbientBackground(modifier = Modifier.fillMaxSize())
 
             Column(
                 modifier = Modifier
@@ -539,11 +597,28 @@ fun IdentifyScreen(
             ) {
                 Spacer(Modifier.height(24.dp))
 
-                // Top bar with training button
+                // Top bar — settings + training
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Dark15)
+                            .border(1.dp, GlassBorder, CircleShape)
+                            .clickable { onOpenSettings() }
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Configurações",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(24.dp))
@@ -587,51 +662,82 @@ fun IdentifyScreen(
                 )
 
                 Box(contentAlignment = Alignment.Center) {
-                    // Pulse ring
+                    // Outer pulse ring (mais largo, gradient)
                     Box(
                         Modifier
-                            .size((120 * pulseScale).dp)
+                            .size((150 * pulseScale).dp)
                             .border(
-                                2.dp,
-                                Cyan40.copy(alpha = pulseAlpha),
+                                1.5.dp,
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Cyan40.copy(alpha = pulseAlpha),
+                                        com.lbwma.cnn.ui.theme.Violet40.copy(alpha = pulseAlpha),
+                                        com.lbwma.cnn.ui.theme.Magenta40.copy(alpha = pulseAlpha * 0.5f),
+                                        Cyan40.copy(alpha = pulseAlpha)
+                                    )
+                                ),
                                 CircleShape
                             )
                     )
-                    // Icon circle
+                    // Inner pulse ring
+                    Box(
+                        Modifier
+                            .size((125 * pulseScale).dp)
+                            .border(
+                                1.dp,
+                                Cyan40.copy(alpha = pulseAlpha * 0.6f),
+                                CircleShape
+                            )
+                    )
+                    // Halo de fundo
+                    Box(
+                        Modifier
+                            .size(180.dp)
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(Cyan40.copy(alpha = 0.18f), Color.Transparent)
+                                ),
+                                CircleShape
+                            )
+                    )
+                    // Icon circle premium
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(100.dp)
+                            .size(110.dp)
                             .clip(CircleShape)
-                            .background(
-                                Brush.radialGradient(
-                                    listOf(Dark20, Dark15)
-                                )
-                            )
-                            .border(1.dp, GlassBorder, CircleShape)
+                            .background(com.lbwma.cnn.ui.heroGradient())
+                            .border(1.5.dp, Color.White.copy(alpha = 0.2f), CircleShape)
                     ) {
                         Icon(
                             Icons.Default.Psychology,
                             contentDescription = null,
-                            tint = Cyan40,
-                            modifier = Modifier.size(48.dp)
+                            tint = Color.White,
+                            modifier = Modifier.size(54.dp)
                         )
                     }
                 }
 
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(36.dp))
 
                 Text(
-                    "Identificar Conversor",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
+                    "Identificar",
+                    style = MaterialTheme.typography.displayMedium.copy(
+                        brush = com.lbwma.cnn.ui.heroGradient()
+                    ),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    "Conversor",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = TextPrimary,
                     textAlign = TextAlign.Center
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    "Tire uma foto de um conversor e a IA vai identificar o modelo",
-                    style = MaterialTheme.typography.bodyLarge,
+                    "Tire uma foto e a IA identifica o modelo",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(0.8f)
@@ -683,35 +789,99 @@ fun IdentifyScreen(
                     }
                 }
 
+                Spacer(Modifier.height(24.dp))
+
+                // Histórico de identificações recentes
+                val history by IdentificationHistory.entries.collectAsState()
+                if (history.isNotEmpty()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Recentes",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextSecondary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Limpar",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary.copy(alpha = 0.5f),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { IdentificationHistory.clear() }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        androidx.compose.foundation.lazy.LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
+                        ) {
+                            items(history.take(10), key = { it.timestamp }) { entry ->
+                                Column(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(Dark15.copy(alpha = 0.7f))
+                                        .border(1.dp, GlassBorder, RoundedCornerShape(14.dp))
+                                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                                ) {
+                                    Text(
+                                        entry.classe,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    val color = if (entry.confianca >= 80f) Success else Cyan60
+                                    Text(
+                                        "${entry.confianca.toInt()}%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = color
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Spacer(Modifier.weight(1f))
 
-                // Open camera button
+                // Open camera button — premium hero gradient
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
+                        .fillMaxWidth(0.85f)
                         .padding(bottom = 40.dp)
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(Cyan40, Cyan40.copy(alpha = 0.85f))
-                            )
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(com.lbwma.cnn.ui.primaryGradient())
+                        .border(
+                            1.dp,
+                            Color.White.copy(alpha = 0.15f),
+                            RoundedCornerShape(32.dp)
                         )
                         .clickable { requestCameraAndOpen() }
-                        .padding(horizontal = 48.dp, vertical = 18.dp)
+                        .padding(horizontal = 48.dp, vertical = 20.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Default.CameraAlt,
                             contentDescription = null,
-                            tint = Color(0xFF00131E),
+                            tint = com.lbwma.cnn.ui.theme.OnPrimaryDark,
                             modifier = Modifier.size(24.dp)
                         )
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(14.dp))
                         Text(
-                            "Abrir Camera",
+                            "Abrir Câmera",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF00131E)
+                            letterSpacing = 0.5.sp,
+                            color = com.lbwma.cnn.ui.theme.OnPrimaryDark
                         )
                     }
                 }
@@ -723,8 +893,8 @@ fun IdentifyScreen(
     if (showPermissionDialog) {
         AlertDialog(
             onDismissRequest = { showPermissionDialog = false },
-            containerColor = Dark10,
-            shape = RoundedCornerShape(24.dp),
+            containerColor = Dark15,
+            shape = RoundedCornerShape(28.dp),
             title = {
                 Text(
                     "Permissao necessaria",

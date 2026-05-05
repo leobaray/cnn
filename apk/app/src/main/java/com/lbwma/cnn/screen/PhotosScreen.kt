@@ -84,6 +84,7 @@ import com.lbwma.cnn.network.Foto
 import com.lbwma.cnn.network.ThumbnailCache
 import com.lbwma.cnn.network.UploadManager
 import com.lbwma.cnn.network.UploadState
+import com.lbwma.cnn.ui.SkeletonBox
 import com.lbwma.cnn.ui.theme.Cyan40
 import com.lbwma.cnn.ui.theme.Dark00
 import com.lbwma.cnn.ui.theme.Dark10
@@ -211,7 +212,9 @@ fun PhotosScreen(
                     Column(Modifier.weight(1f)) {
                         Text(
                             conversorName,
-                            style = MaterialTheme.typography.headlineMedium,
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                brush = com.lbwma.cnn.ui.heroGradient()
+                            ),
                             fontWeight = FontWeight.Bold
                         )
                         val subtitle = when {
@@ -239,38 +242,48 @@ fun PhotosScreen(
         floatingActionButton = {
             if (filterPrefix != null) return@Scaffold
             Box {
-                FloatingActionButton(
-                    onClick = { showMenu = true },
-                    containerColor = Cyan40,
-                    contentColor = Color(0xFF00131E),
-                    shape = RoundedCornerShape(18.dp),
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 12.dp,
-                        pressedElevation = 4.dp
-                    ),
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(com.lbwma.cnn.ui.primaryGradient())
+                        .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+                        .clickable { showMenu = true }
+                        .padding(horizontal = 18.dp, vertical = 14.dp)
                         .drawBehind {
                             drawCircle(
-                                color = Cyan40.copy(alpha = 0.25f),
-                                radius = size.minDimension / 1.5f
+                                color = Cyan40.copy(alpha = 0.30f),
+                                radius = size.minDimension / 1.4f
                             )
                         }
                 ) {
-                    Icon(Icons.Default.Add, "Adicionar foto", modifier = Modifier.size(26.dp))
+                    Icon(
+                        Icons.Default.Add,
+                        "Adicionar",
+                        tint = com.lbwma.cnn.ui.theme.OnPrimaryDark,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Adicionar",
+                        color = com.lbwma.cnn.ui.theme.OnPrimaryDark,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
-                    containerColor = Dark10,
+                    containerColor = Dark15,
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Tirar fotos") },
+                        text = { Text("Tirar fotos", fontWeight = FontWeight.Medium) },
                         onClick = { showMenu = false; cameraPermissionLauncher.launch(Manifest.permission.CAMERA) },
                         leadingIcon = { Icon(Icons.Default.CameraAlt, null, tint = Cyan40, modifier = Modifier.size(20.dp)) }
                     )
                     DropdownMenuItem(
-                        text = { Text("Escolher da galeria") },
+                        text = { Text("Da galeria", fontWeight = FontWeight.Medium) },
                         onClick = { showMenu = false; galleryLauncher.launch("image/*") },
                         leadingIcon = { Icon(Icons.Default.Image, null, tint = Cyan40, modifier = Modifier.size(20.dp)) }
                     )
@@ -281,22 +294,68 @@ fun PhotosScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             if (uploadState.pending > 0) {
-                LinearProgressIndicator(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .height(3.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .align(Alignment.TopCenter),
-                    color = Cyan40,
-                    trackColor = Dark15,
-                    strokeCap = StrokeCap.Round
-                )
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Enviando ${uploadState.pending} de ${uploadState.total}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (uploadState.retryingFiles.isNotEmpty()) {
+                            Text(
+                                "Sem rede · tentando…",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFB74D),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(
+                            "Cancelar",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { UploadManager.cancelAll(conversorName) }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { uploadState.progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = Cyan40,
+                        trackColor = Dark15,
+                        strokeCap = StrokeCap.Round
+                    )
+                }
             }
             when {
-                loading -> CircularProgressIndicator(
-                    Modifier.align(Alignment.Center), color = Cyan40, strokeWidth = 2.5.dp
-                )
+                loading -> LazyVerticalGrid(
+                    columns = GridCells.Adaptive(108.dp),
+                    contentPadding = PaddingValues(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(20) {
+                        SkeletonBox(
+                            modifier = Modifier.aspectRatio(1f),
+                            cornerDp = 14
+                        )
+                    }
+                }
                 fotos.isEmpty() -> Column(
                     Modifier.align(Alignment.Center).padding(48.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -356,8 +415,8 @@ fun PhotosScreen(
                             Box(
                                 Modifier
                                     .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .border(1.dp, GlassBorder, RoundedCornerShape(14.dp))
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
                                     .background(Dark10)
                                     .clickable { onViewPhoto(foto.nome) }
                             ) {
@@ -369,11 +428,7 @@ fun PhotosScreen(
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 } else {
-                                    CircularProgressIndicator(
-                                        Modifier.size(20.dp).align(Alignment.Center),
-                                        strokeWidth = 2.dp,
-                                        color = Cyan40
-                                    )
+                                    SkeletonBox(modifier = Modifier.fillMaxSize(), cornerDp = 14)
                                 }
                                 // Top gradient for delete button
                                 Box(
@@ -415,8 +470,8 @@ fun PhotosScreen(
     if (showPermissionDialog) {
         AlertDialog(
             onDismissRequest = { showPermissionDialog = false },
-            containerColor = Dark10,
-            shape = RoundedCornerShape(24.dp),
+            containerColor = Dark15,
+            shape = RoundedCornerShape(28.dp),
             title = {
                 Text(
                     "Câmera necessária",
@@ -463,8 +518,8 @@ fun PhotosScreen(
     deleteTarget?.let { arquivo ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            containerColor = Dark10,
-            shape = RoundedCornerShape(24.dp),
+            containerColor = Dark15,
+            shape = RoundedCornerShape(28.dp),
             title = {
                 Text(
                     "Deletar foto",

@@ -31,8 +31,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,6 +54,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,7 +71,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lbwma.cnn.model.PhotoCountCache
 import com.lbwma.cnn.network.ApiClient
+import com.lbwma.cnn.ui.SkeletonBox
 import com.lbwma.cnn.ui.theme.Cyan40
 import com.lbwma.cnn.ui.theme.Cyan60
 import com.lbwma.cnn.ui.theme.Dark00
@@ -88,7 +94,13 @@ fun ConvertersScreen(
     onIaModeChange: (Boolean) -> Unit
 ) {
     var conversores by remember { mutableStateOf<List<String>>(emptyList()) }
-    var fotoCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    val cachedCounts by PhotoCountCache.counts.collectAsState()
+    val completedSet by PhotoCountCache.completedConversores.collectAsState()
+    val fotoCounts by remember(cachedCounts) {
+        derivedStateOf {
+            conversores.associateWith { (cachedCounts[it] ?: 0) }
+        }
+    }
     var loading by remember { mutableStateOf(true) }
     var refreshing by remember { mutableStateOf(false) }
     var showDialog by remember { mutableStateOf(false) }
@@ -98,11 +110,19 @@ fun ConvertersScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
+    var search by remember { mutableStateOf("") }
+    var showSearch by remember { mutableStateOf(false) }
+    val filteredConversores by remember(conversores, search) {
+        derivedStateOf {
+            if (search.isBlank()) conversores
+            else conversores.filter { it.contains(search.trim(), ignoreCase = true) }
+        }
+    }
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
 
     fun loadConversores(isRefresh: Boolean = false) {
-        if (isRefresh) refreshing = true else loading = true
+        if (isRefresh) refreshing = true else loading = conversores.isEmpty()
         scope.launch {
             ApiClient.getConversores()
                 .onSuccess { conversores = it; loading = false; refreshing = false }
@@ -112,16 +132,15 @@ fun ConvertersScreen(
 
     LaunchedEffect(Unit) { loadConversores() }
 
-    // Carrega contagem de fotos de cada conversor em paralelo
+    // Carrega contagem de fotos de cada conversor em paralelo (atualiza cache em tempo real)
     LaunchedEffect(conversores) {
         if (conversores.isEmpty()) return@LaunchedEffect
-        fotoCounts = emptyMap()
         val jobs = conversores.map { nome ->
             async { nome to (ApiClient.getFotos(nome).getOrNull()?.size ?: 0) }
         }
         jobs.forEach { deferred ->
             val (nome, count) = deferred.await()
-            fotoCounts = fotoCounts + (nome to count)
+            PhotoCountCache.setCount(nome, count)
         }
     }
 
@@ -139,98 +158,162 @@ fun ConvertersScreen(
                     .statusBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            "Conversores",
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (conversores.isNotEmpty()) {
-                            Spacer(Modifier.height(2.dp))
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
                             Text(
-                                "${conversores.size} cadastrado${if (conversores.size != 1) "s" else ""}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary
+                                "Conversores",
+                                style = MaterialTheme.typography.headlineLarge.copy(
+                                    brush = com.lbwma.cnn.ui.heroGradient()
+                                ),
+                                fontWeight = FontWeight.Bold
                             )
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Toggle de modo: Fotos / IA
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50.dp))
-                                .background(Dark15)
-                                .border(1.dp, GlassBorder, RoundedCornerShape(50.dp))
-                                .padding(3.dp)
-                        ) {
-                            listOf("Fotos" to false, "IA" to true).forEach { (label, isIa) ->
-                                val selected = iaMode == isIa
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(50.dp))
-                                        .background(if (selected) Cyan40 else Color.Transparent)
-                                        .clickable { onIaModeChange(isIa) }
-                                        .padding(horizontal = 18.dp, vertical = 6.dp)
-                                ) {
-                                    Text(
-                                        label,
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (selected) Color(0xFF00131E) else TextSecondary
-                                    )
-                                }
+                            if (conversores.isNotEmpty()) {
+                                Spacer(Modifier.height(2.dp))
+                                val completos = completedSet.intersect(conversores.toSet()).size
+                                Text(
+                                    "${conversores.size} cadastrado${if (conversores.size != 1) "s" else ""}" +
+                                        if (completos > 0) " · $completos completo${if (completos != 1) "s" else ""}" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
                             }
                         }
-                        Spacer(Modifier.width(8.dp))
-                        IconButton(
-                            onClick = { loadConversores(isRefresh = true) },
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { showSearch = !showSearch; if (!showSearch) search = "" },
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(if (showSearch) Cyan40.copy(alpha = 0.2f) else Dark15)
+                            ) {
+                                Icon(
+                                    androidx.compose.material.icons.Icons.Default.Search,
+                                    "Buscar",
+                                    tint = if (showSearch) Cyan40 else TextSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            IconButton(
+                                onClick = { loadConversores(isRefresh = true) },
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(Dark15)
+                            ) {
+                                Icon(Icons.Default.Refresh, "Atualizar", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+
+                    AnimatedVisibility(
+                        visible = showSearch,
+                        enter = fadeIn() + androidx.compose.animation.expandVertically(),
+                        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically()
+                    ) {
+                        OutlinedTextField(
+                            value = search,
+                            onValueChange = { search = it },
+                            placeholder = { Text("Buscar conversor…", color = TextSecondary) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Cyan40,
+                                unfocusedBorderColor = Dark20,
+                                cursorColor = Cyan40,
+                                focusedContainerColor = Dark15.copy(alpha = 0.5f),
+                                unfocusedContainerColor = Dark15.copy(alpha = 0.3f),
+                            ),
                             modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(Dark15)
-                        ) {
-                            Icon(Icons.Default.Refresh, "Atualizar", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                                .fillMaxWidth()
+                                .padding(top = 12.dp)
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Toggle de modo: Fotos / IA — full-width pill
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(50.dp))
+                            .background(Dark15)
+                            .border(1.dp, GlassBorder, RoundedCornerShape(50.dp))
+                            .padding(3.dp)
+                    ) {
+                        listOf("Fotos" to false, "IA" to true).forEach { (label, isIa) ->
+                            val selected = iaMode == isIa
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(50.dp))
+                                    .background(if (selected) Cyan40 else Color.Transparent)
+                                    .clickable { onIaModeChange(isIa) }
+                                    .padding(vertical = 8.dp)
+                            ) {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (selected) Color(0xFF00131E) else TextSecondary
+                                )
+                            }
                         }
                     }
                 }
             }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showDialog = true },
-                containerColor = Cyan40,
-                contentColor = Color(0xFF00131E),
-                shape = RoundedCornerShape(18.dp),
-                elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 12.dp,
-                    pressedElevation = 4.dp
-                ),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(com.lbwma.cnn.ui.primaryGradient())
+                    .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+                    .clickable { showDialog = true }
+                    .padding(horizontal = 18.dp, vertical = 14.dp)
                     .drawBehind {
                         drawCircle(
-                            color = Cyan40.copy(alpha = 0.25f),
-                            radius = size.minDimension / 1.5f
+                            color = Cyan40.copy(alpha = 0.30f),
+                            radius = size.minDimension / 1.4f
                         )
                     }
             ) {
-                Icon(Icons.Default.Add, "Novo conversor", modifier = Modifier.size(26.dp))
+                Icon(Icons.Default.Add, "Novo", tint = com.lbwma.cnn.ui.theme.OnPrimaryDark, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Novo",
+                    color = com.lbwma.cnn.ui.theme.OnPrimaryDark,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
         snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
-                loading -> CircularProgressIndicator(
-                    Modifier.align(Alignment.Center),
-                    color = Cyan40,
-                    strokeWidth = 2.5.dp
-                )
+                loading -> Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    repeat(6) {
+                        SkeletonBox(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(72.dp),
+                            cornerDp = 16
+                        )
+                    }
+                }
                 conversores.isEmpty() -> {
                     Column(
                         Modifier.align(Alignment.Center).padding(48.dp),
@@ -238,31 +321,50 @@ fun ConvertersScreen(
                     ) {
                         Box(
                             contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(96.dp)
-                                .clip(CircleShape)
-                                .background(Dark10)
-                                .border(1.dp, GlassBorder, CircleShape)
+                            modifier = Modifier.size(120.dp)
                         ) {
-                            Icon(
-                                Icons.Outlined.Tune,
-                                contentDescription = null,
-                                modifier = Modifier.size(42.dp),
-                                tint = TextSecondary.copy(alpha = 0.4f)
+                            Box(
+                                Modifier
+                                    .size(120.dp)
+                                    .background(
+                                        Brush.radialGradient(
+                                            listOf(Cyan40.copy(alpha = 0.10f), Color.Transparent)
+                                        ),
+                                        CircleShape
+                                    )
                             )
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(96.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(com.lbwma.cnn.ui.theme.Dark15, com.lbwma.cnn.ui.theme.Dark10)
+                                        )
+                                    )
+                                    .border(1.dp, GlassBorder, CircleShape)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Tune,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(40.dp),
+                                    tint = Cyan40.copy(alpha = 0.5f)
+                                )
+                            }
                         }
-                        Spacer(Modifier.height(24.dp))
+                        Spacer(Modifier.height(28.dp))
                         Text(
-                            "Nenhum conversor",
+                            "Nenhum conversor ainda",
                             style = MaterialTheme.typography.titleLarge,
-                            color = TextSecondary,
-                            fontWeight = FontWeight.SemiBold
+                            color = com.lbwma.cnn.ui.theme.TextPrimary,
+                            fontWeight = FontWeight.Bold
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Toque em + para criar o primeiro",
+                            "Toque em \"Novo\" para começar",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary.copy(alpha = 0.5f),
+                            color = TextSecondary,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -277,7 +379,21 @@ fun ConvertersScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        itemsIndexed(conversores, key = { _, nome -> nome }) { index, nome ->
+                        if (filteredConversores.isEmpty() && search.isNotBlank()) {
+                            item {
+                                Box(
+                                    Modifier.fillMaxWidth().padding(top = 40.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "Nenhum conversor encontrado",
+                                        color = TextSecondary,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        }
+                        itemsIndexed(filteredConversores, key = { _, nome -> nome }) { index, nome ->
                             AnimatedVisibility(
                                 visible = true,
                                 enter = fadeIn(tween(300, delayMillis = index * 50)) +
@@ -290,17 +406,31 @@ fun ConvertersScreen(
                                         ),
                                 modifier = Modifier.animateItem()
                             ) {
+                                val complete = nome in completedSet
+                                val count = fotoCounts[nome] ?: 0
+                                val accent = if (complete) com.lbwma.cnn.ui.theme.Success else Cyan40
+                                val accentLight = if (complete) com.lbwma.cnn.ui.theme.SuccessLight else Cyan60
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .border(
+                                            1.dp,
+                                            Brush.linearGradient(
+                                                listOf(
+                                                    accent.copy(alpha = if (complete) 0.4f else 0.15f),
+                                                    GlassBorder,
+                                                    GlassBorder,
+                                                )
+                                            ),
+                                            RoundedCornerShape(20.dp)
+                                        )
                                         .background(
                                             Brush.horizontalGradient(
                                                 colors = listOf(
-                                                    GlassHighlight,
-                                                    Dark10,
-                                                    Dark10
+                                                    accent.copy(alpha = if (complete) 0.10f else 0.04f),
+                                                    com.lbwma.cnn.ui.theme.Dark10,
+                                                    com.lbwma.cnn.ui.theme.Dark05
                                                 )
                                             )
                                         )
@@ -311,41 +441,101 @@ fun ConvertersScreen(
                                                 showOptionsDialog = true
                                             }
                                         )
-                                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                                        .padding(horizontal = 16.dp, vertical = 16.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Gradient accent bar — verde quando atingir 4400 fotos
-                                    val complete = (fotoCounts[nome] ?: 0) >= 4400
-                                    val barTop = if (complete) Color(0xFF4CAF50) else Cyan40
-                                    val barBottom = if (complete) Color(0xFF4CAF50).copy(alpha = 0.3f) else Cyan60.copy(alpha = 0.3f)
+                                    // Avatar com inicial / status
                                     Box(
-                                        Modifier
-                                            .width(3.dp)
-                                            .height(36.dp)
-                                            .clip(RoundedCornerShape(2.dp))
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(CircleShape)
                                             .background(
-                                                Brush.verticalGradient(colors = listOf(barTop, barBottom))
+                                                Brush.linearGradient(
+                                                    listOf(accent.copy(alpha = 0.25f), accent.copy(alpha = 0.10f))
+                                                )
                                             )
-                                    )
-                                    Spacer(Modifier.width(16.dp))
+                                            .border(1.dp, accent.copy(alpha = 0.4f), CircleShape)
+                                    ) {
+                                        Text(
+                                            nome.firstOrNull()?.uppercase() ?: "?",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = accent
+                                        )
+                                    }
+                                    Spacer(Modifier.width(14.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(
                                             nome,
                                             style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.SemiBold
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = com.lbwma.cnn.ui.theme.TextPrimary
                                         )
+                                        Spacer(Modifier.height(4.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (complete) {
+                                                Icon(
+                                                    androidx.compose.material.icons.Icons.Default.CheckCircle,
+                                                    null,
+                                                    tint = accent,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Spacer(Modifier.width(5.dp))
+                                                Text(
+                                                    "Completo · $count fotos",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = accent,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            } else if (count > 0) {
+                                                Text(
+                                                    "$count fotos",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = TextSecondary
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Box(
+                                                    Modifier
+                                                        .weight(1f)
+                                                        .height(3.dp)
+                                                        .clip(RoundedCornerShape(2.dp))
+                                                        .background(com.lbwma.cnn.ui.theme.Dark20)
+                                                ) {
+                                                    Box(
+                                                        Modifier
+                                                            .fillMaxWidth(
+                                                                (count.toFloat() / 4400f).coerceIn(0f, 1f)
+                                                            )
+                                                            .height(3.dp)
+                                                            .background(
+                                                                Brush.horizontalGradient(
+                                                                    listOf(accent, accentLight)
+                                                                )
+                                                            )
+                                                    )
+                                                }
+                                            } else {
+                                                Text(
+                                                    "Vazio",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = TextSecondary.copy(alpha = 0.6f)
+                                                )
+                                            }
+                                        }
                                     }
+                                    Spacer(Modifier.width(8.dp))
                                     Box(
                                         modifier = Modifier
-                                            .size(32.dp)
+                                            .size(34.dp)
                                             .clip(CircleShape)
-                                            .background(Dark15),
+                                            .background(com.lbwma.cnn.ui.theme.Dark15),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             Icons.Default.ChevronRight,
                                             contentDescription = null,
-                                            tint = TextSecondary,
+                                            tint = accent,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
@@ -361,8 +551,8 @@ fun ConvertersScreen(
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false; newName = "" },
-            containerColor = Dark10,
-            shape = RoundedCornerShape(24.dp),
+            containerColor = Dark15,
+            shape = RoundedCornerShape(28.dp),
             title = {
                 Text(
                     "Novo Conversor",
@@ -430,8 +620,8 @@ fun ConvertersScreen(
     if (showOptionsDialog && selectedConversor != null) {
         AlertDialog(
             onDismissRequest = { showOptionsDialog = false },
-            containerColor = Dark10,
-            shape = RoundedCornerShape(24.dp),
+            containerColor = Dark15,
+            shape = RoundedCornerShape(28.dp),
             title = {
                 Text(
                     selectedConversor!!,
@@ -477,8 +667,8 @@ fun ConvertersScreen(
     if (showRenameDialog && selectedConversor != null) {
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
-            containerColor = Dark10,
-            shape = RoundedCornerShape(24.dp),
+            containerColor = Dark15,
+            shape = RoundedCornerShape(28.dp),
             title = {
                 Text(
                     "Renomear Conversor",
@@ -521,7 +711,11 @@ fun ConvertersScreen(
                             showRenameDialog = false
                             scope.launch {
                                 ApiClient.renameConversor(atual, novo)
-                                    .onSuccess { loadConversores(); snackbar.showSnackbar("Renomeado para \"$novo\"") }
+                                    .onSuccess {
+                                        PhotoCountCache.renameConversor(atual, novo)
+                                        loadConversores()
+                                        snackbar.showSnackbar("Renomeado para \"$novo\"")
+                                    }
                                     .onFailure { snackbar.showSnackbar("Erro: ${it.message}") }
                             }
                         }
@@ -548,8 +742,8 @@ fun ConvertersScreen(
     if (showDeleteDialog && selectedConversor != null) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            containerColor = Dark10,
-            shape = RoundedCornerShape(24.dp),
+            containerColor = Dark15,
+            shape = RoundedCornerShape(28.dp),
             title = {
                 Text(
                     "Apagar Conversor",
@@ -579,7 +773,11 @@ fun ConvertersScreen(
                         showDeleteDialog = false
                         scope.launch {
                             ApiClient.deleteConversor(nome)
-                                .onSuccess { loadConversores(); snackbar.showSnackbar("\"$nome\" apagado") }
+                                .onSuccess {
+                                    PhotoCountCache.removeConversor(nome)
+                                    loadConversores()
+                                    snackbar.showSnackbar("\"$nome\" apagado")
+                                }
                                 .onFailure { snackbar.showSnackbar("Erro: ${it.message}") }
                         }
                     }
