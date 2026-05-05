@@ -50,6 +50,8 @@ import coil.ImageLoader
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.lbwma.cnn.model.FILTROS
+import com.lbwma.cnn.model.IdentificationHistory
+import com.lbwma.cnn.model.PhotoCountCache
 import com.lbwma.cnn.model.RefinementStore
 import com.lbwma.cnn.network.ApiClient
 import com.lbwma.cnn.network.AppUpdater
@@ -63,6 +65,7 @@ import com.lbwma.cnn.screen.IdentifyScreen
 import com.lbwma.cnn.screen.LoginScreen
 import com.lbwma.cnn.screen.PhotosScreen
 import com.lbwma.cnn.screen.ReviewScreen
+import com.lbwma.cnn.screen.SettingsScreen
 import com.lbwma.cnn.ui.theme.CnnTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -76,6 +79,7 @@ sealed class Screen {
     data object Login : Screen()
     data object Identify : Screen()
     data object Converters : Screen()
+    data object Settings : Screen()
     data class Photos(val name: String, val filterPrefix: String? = null) : Screen()
     data class FilterGrid(val conversorName: String) : Screen()
     data class Camera(val conversorName: String, val iaMode: Boolean, val filtroId: Int? = null) : Screen()
@@ -86,6 +90,7 @@ sealed class Screen {
         is Login -> 0
         is Identify -> 1
         is Converters -> 1
+        is Settings -> 2
         is Photos -> 2
         is FilterGrid -> 2
         is Camera -> 3
@@ -100,6 +105,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         ThumbnailCache.init(this)
         RefinementStore.init(this)
+        PhotoCountCache.init(this)
+        IdentificationHistory.init(this)
         val prefs = getSharedPreferences("app_settings", MODE_PRIVATE)
         setContent {
             CnnTheme {
@@ -163,6 +170,7 @@ class MainActivity : ComponentActivity() {
                         is Screen.Photos -> if (s.filterPrefix != null) Screen.FilterGrid(s.name) else Screen.Converters
                         is Screen.FilterGrid -> Screen.Converters
                         is Screen.Review -> Screen.FilterGrid(s.conversorName)
+                        is Screen.Settings -> Screen.Identify
                         is Screen.Converters -> Screen.Identify
                         is Screen.Identify -> Screen.Login
                         else -> screen
@@ -208,7 +216,12 @@ class MainActivity : ComponentActivity() {
                                 sessionExpired = sessionExpired
                             )
                             Screen.Identify -> IdentifyScreen(
-                                onGoToTraining = { screen = Screen.Converters }
+                                onGoToTraining = { screen = Screen.Converters },
+                                onOpenSettings = { screen = Screen.Settings }
+                            )
+                            Screen.Settings -> SettingsScreen(
+                                onBack = { screen = Screen.Identify },
+                                onLoggedOut = { screen = Screen.Login }
                             )
                             Screen.Converters -> ConvertersScreen(
                                 onConversorClick = { name ->
@@ -420,8 +433,8 @@ class MainActivity : ComponentActivity() {
                     postCaptureState?.let { (conversor, filtroId, files) ->
                         AlertDialog(
                             onDismissRequest = {},
-                            containerColor = com.lbwma.cnn.ui.theme.Dark10,
-                            shape = RoundedCornerShape(24.dp),
+                            containerColor = com.lbwma.cnn.ui.theme.Dark15,
+                            shape = RoundedCornerShape(28.dp),
                             title = {
                                 Text(
                                     "Revisar ${files.size} fotos?",

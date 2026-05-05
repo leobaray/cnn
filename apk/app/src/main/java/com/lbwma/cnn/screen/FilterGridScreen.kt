@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -70,13 +71,16 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import com.lbwma.cnn.model.FILTROS
 import com.lbwma.cnn.model.FOTOS_POR_FILTRO
+import com.lbwma.cnn.model.PhotoCountCache
 import com.lbwma.cnn.model.RefinementStore
 import com.lbwma.cnn.network.ApiClient
 import com.lbwma.cnn.network.UploadManager
 import com.lbwma.cnn.network.UploadState
+import com.lbwma.cnn.ui.SkeletonBox
 import com.lbwma.cnn.ui.theme.Cyan40
 import com.lbwma.cnn.ui.theme.Dark00
 import com.lbwma.cnn.ui.theme.Dark10
@@ -117,7 +121,7 @@ fun FilterGridScreen(
     }
 
     fun loadCounts() {
-        loading = true
+        loading = filterCounts.isEmpty()
         scope.launch {
             ApiClient.getFotos(conversorName)
                 .onSuccess { fotos ->
@@ -126,6 +130,9 @@ fun FilterGridScreen(
                     }
                     filterCounts = counts
                     loading = false
+                    // Atualiza cache: total + por filtro
+                    PhotoCountCache.setCount(conversorName, fotos.size)
+                    counts.forEach { (id, c) -> PhotoCountCache.setFilterCount(conversorName, id, c) }
                 }
                 .onFailure {
                     loading = false
@@ -191,13 +198,16 @@ fun FilterGridScreen(
                         Column {
                             Text(
                                 conversorName,
-                                style = MaterialTheme.typography.titleLarge,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    brush = com.lbwma.cnn.ui.heroGradient()
+                                ),
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 "16 filtros · IA",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextSecondary,
+                                letterSpacing = 1.sp
                             )
                         }
                     }
@@ -220,11 +230,22 @@ fun FilterGridScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             if (loading && filterCounts.isEmpty()) {
-                CircularProgressIndicator(
-                    Modifier.align(Alignment.Center),
-                    color = Cyan40,
-                    strokeWidth = 2.5.dp
-                )
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(16) {
+                        SkeletonBox(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(96.dp),
+                            cornerDp = 16
+                        )
+                    }
+                }
             } else {
                 // Total progress (servidor + uploads concluídos)
                 val totalFotos = filterCounts.values.sum() + completedForConversor.size
@@ -279,19 +300,39 @@ fun FilterGridScreen(
                                         initialOffsetY = { it / 3 }
                                     )
                         ) {
-                            val cardBg = if (complete) {
-                                Brush.horizontalGradient(
-                                    listOf(green.copy(alpha = 0.1f), Dark10)
-                                )
-                            } else {
-                                Brush.horizontalGradient(listOf(Dark10, Dark10))
+                            val accent = when {
+                                complete -> green
+                                hasPending -> Color(0xFFFBBF24)
+                                else -> Cyan40
                             }
+                            val accentLight = when {
+                                complete -> Color(0xFF34D399)
+                                hasPending -> Color(0xFFFCD34D)
+                                else -> com.lbwma.cnn.ui.theme.Cyan60
+                            }
+                            val cardBg = Brush.verticalGradient(
+                                listOf(
+                                    accent.copy(alpha = if (complete) 0.10f else 0.04f),
+                                    com.lbwma.cnn.ui.theme.Dark10,
+                                    com.lbwma.cnn.ui.theme.Dark05
+                                )
+                            )
 
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .border(
+                                        1.dp,
+                                        Brush.linearGradient(
+                                            listOf(
+                                                accent.copy(alpha = if (complete) 0.45f else 0.18f),
+                                                GlassBorder,
+                                                GlassBorder
+                                            )
+                                        ),
+                                        RoundedCornerShape(18.dp)
+                                    )
                                     .background(cardBg)
                                     .combinedClickable(
                                         onClick = {
@@ -299,9 +340,9 @@ fun FilterGridScreen(
                                                 hasPending -> onReviewClick(filtro.id)
                                                 complete -> scope.launch { snackbar.showSnackbar("Filtro completo") }
                                                 else -> {
-                                            pendingFiltroId = filtro.id
-                                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                        }
+                                                    pendingFiltroId = filtro.id
+                                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                                }
                                             }
                                         },
                                         onLongClick = { onFilterLongClick(filtro.id) }
@@ -313,54 +354,109 @@ fun FilterGridScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.Top
                                 ) {
-                                    Column {
+                                    // Prefix badge premium
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(accent.copy(alpha = 0.15f))
+                                            .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    ) {
                                         Text(
-                                            filtro.linha1,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            filtro.linha2,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = TextSecondary
+                                            filtro.prefix.uppercase(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = accent,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 0.5.sp
                                         )
                                     }
                                     when {
-                                        hasPending -> Icon(
-                                            Icons.Default.HourglassTop,
-                                            contentDescription = "Refinamento pendente",
-                                            tint = Color(0xFFFFB74D),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        complete -> Icon(
-                                            Icons.Default.Check,
-                                            contentDescription = "Completo",
-                                            tint = green,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+                                        hasPending -> Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clip(CircleShape)
+                                                .background(accent.copy(alpha = 0.18f))
+                                        ) {
+                                            Icon(
+                                                Icons.Default.HourglassTop,
+                                                contentDescription = "Refinamento pendente",
+                                                tint = accent,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                        complete -> Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clip(CircleShape)
+                                                .background(accent.copy(alpha = 0.18f))
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = "Completo",
+                                                tint = accent,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
                                     }
                                 }
 
                                 Spacer(Modifier.height(10.dp))
 
-                                LinearProgressIndicator(
-                                    progress = { (count.toFloat() / FOTOS_POR_FILTRO).coerceIn(0f, 1f) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(4.dp)
-                                        .clip(RoundedCornerShape(2.dp)),
-                                    color = if (complete) green else Cyan40,
-                                    trackColor = Dark15,
-                                    strokeCap = StrokeCap.Round
+                                Text(
+                                    filtro.linha1,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = com.lbwma.cnn.ui.theme.TextPrimary
                                 )
+                                Text(
+                                    filtro.linha2,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+
+                                Spacer(Modifier.height(12.dp))
+
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(5.dp)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(com.lbwma.cnn.ui.theme.Dark20)
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth(
+                                                (count.toFloat() / FOTOS_POR_FILTRO).coerceIn(0f, 1f)
+                                            )
+                                            .height(5.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(
+                                                Brush.horizontalGradient(listOf(accent, accentLight))
+                                            )
+                                    )
+                                }
 
                                 Spacer(Modifier.height(6.dp))
 
-                                Text(
-                                    "$count / $FOTOS_POR_FILTRO",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (complete) green else TextSecondary
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        "$count",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = accent
+                                    )
+                                    Text(
+                                        "/ $FOTOS_POR_FILTRO",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextSecondary
+                                    )
+                                }
                             }
                         }
                     }
@@ -372,8 +468,8 @@ fun FilterGridScreen(
     if (showPermissionDialog) {
         AlertDialog(
             onDismissRequest = { showPermissionDialog = false },
-            containerColor = Dark10,
-            shape = RoundedCornerShape(24.dp),
+            containerColor = Dark15,
+            shape = RoundedCornerShape(28.dp),
             title = {
                 Text(
                     "Câmera necessária",

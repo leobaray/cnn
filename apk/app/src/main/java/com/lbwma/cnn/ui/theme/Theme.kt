@@ -12,11 +12,12 @@ import androidx.core.view.WindowCompat
 
 private val CnnColorScheme = darkColorScheme(
     primary = Cyan40,
-    onPrimary = Color(0xFF00131E),
+    onPrimary = OnPrimaryDark,
     primaryContainer = CyanDark,
     onPrimaryContainer = Cyan80,
-    secondary = Success,
-    onSecondary = Color.Black,
+    secondary = Violet40,
+    onSecondary = Color.White,
+    tertiary = Magenta40,
     background = Dark00,
     onBackground = TextPrimary,
     surface = Dark05,

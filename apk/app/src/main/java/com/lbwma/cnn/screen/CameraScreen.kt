@@ -65,6 +65,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
@@ -303,12 +304,13 @@ fun CameraScreen(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Cyan40)
+                        .background(com.lbwma.cnn.ui.primaryGradient())
+                        .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
                         .padding(horizontal = 18.dp, vertical = 8.dp)
                 ) {
                     Text(
                         "$photoCount foto${if (photoCount != 1) "s" else ""}",
-                        color = Color(0xFF00131E),
+                        color = com.lbwma.cnn.ui.theme.OnPrimaryDark,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -342,37 +344,60 @@ fun CameraScreen(
                 .padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Capture button
+            // Capture button — premium
             val ringColor = if (isLocked) Cyan40 else Color.White
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(82.dp)
+                modifier = Modifier.size(88.dp)
             ) {
-                // Outer ring
+                // Halo de fundo
+                if (isLocked) {
+                    Box(
+                        Modifier
+                            .size(110.dp)
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(Cyan40.copy(alpha = 0.4f), Color.Transparent)
+                                ),
+                                CircleShape
+                            )
+                    )
+                }
+                // Outer ring multicolor sweep
                 Box(
                     Modifier
-                        .size(82.dp)
+                        .size(88.dp)
                         .border(
                             3.dp,
-                            Brush.sweepGradient(
-                                colors = listOf(
-                                    ringColor,
-                                    ringColor.copy(alpha = 0.6f),
-                                    ringColor,
-                                    ringColor.copy(alpha = 0.6f),
-                                    ringColor
+                            if (isLocked) Brush.sweepGradient(
+                                listOf(
+                                    Cyan40,
+                                    com.lbwma.cnn.ui.theme.Violet40,
+                                    com.lbwma.cnn.ui.theme.Magenta40,
+                                    Cyan40
+                                )
+                            ) else Brush.sweepGradient(
+                                listOf(
+                                    Color.White,
+                                    Color.White.copy(alpha = 0.5f),
+                                    Color.White,
+                                    Color.White.copy(alpha = 0.5f),
+                                    Color.White
                                 )
                             ),
                             CircleShape
                         )
                 )
-                // Inner fill — arrastar para cima ativa rajada, toque para/dispara
+                // Inner fill
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(66.dp)
+                        .size(70.dp)
                         .clip(CircleShape)
-                        .background(if (isLocked) Cyan40 else Color.White)
+                        .background(
+                            if (isLocked) com.lbwma.cnn.ui.primaryGradient()
+                            else Brush.radialGradient(listOf(Color.White, Color.White.copy(alpha = 0.85f)))
+                        )
                         .pointerInput(isLocked) {
                             val dragThresholdPx = 50.dp.toPx()
                             awaitEachGesture {
@@ -422,11 +447,8 @@ fun CameraScreen(
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(28.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(Cyan40, Cyan40.copy(alpha = 0.85f))
-                            )
-                        )
+                        .background(com.lbwma.cnn.ui.primaryGradient())
+                        .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(28.dp))
                         .clickable { onPhotosTaken(capturedFiles.toList()) }
                         .padding(horizontal = 32.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -435,15 +457,16 @@ fun CameraScreen(
                     Icon(
                         Icons.Default.Check,
                         contentDescription = null,
-                        tint = Color(0xFF00131E),
+                        tint = com.lbwma.cnn.ui.theme.OnPrimaryDark,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
                         "Enviar $photoCount foto${if (photoCount != 1) "s" else ""}",
-                        color = Color(0xFF00131E),
+                        color = com.lbwma.cnn.ui.theme.OnPrimaryDark,
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
                     )
                 }
             }
@@ -454,8 +477,8 @@ fun CameraScreen(
     if (showDiscardDialog) {
         AlertDialog(
             onDismissRequest = { showDiscardDialog = false },
-            containerColor = Dark10,
-            shape = RoundedCornerShape(24.dp),
+            containerColor = Dark15,
+            shape = RoundedCornerShape(28.dp),
             title = {
                 Text(
                     "Descartar fotos?",

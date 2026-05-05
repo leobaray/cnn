@@ -11,10 +11,46 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
+import java.net.SocketTimeoutException
 import java.net.URLEncoder
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
 data class Foto(val nome: String, val tamanhoKb: Double)
+
+sealed class ApiError(message: String) : Exception(message) {
+    class Network(msg: String = "Sem conexão com o servidor") : ApiError(msg)
+    class Timeout(msg: String = "O servidor demorou demais para responder") : ApiError(msg)
+    class Unauthorized(msg: String = "Sessão expirada — faça login novamente") : ApiError(msg)
+    class Forbidden(msg: String = "Acesso negado") : ApiError(msg)
+    class NotFound(msg: String = "Não encontrado") : ApiError(msg)
+    class Conflict(msg: String) : ApiError(msg)
+    class BadRequest(msg: String = "Dados inválidos") : ApiError(msg)
+    class Server(code: Int) : ApiError("Erro no servidor ($code)")
+    class Unknown(msg: String) : ApiError(msg)
+}
+
+private fun mapException(e: Throwable): ApiError = when (e) {
+    is ApiError -> e
+    is UnknownHostException -> ApiError.Network()
+    is SocketTimeoutException -> ApiError.Timeout()
+    is IOException -> ApiError.Network()
+    else -> ApiError.Unknown(e.message ?: "Erro desconhecido")
+}
+
+private fun mapHttpError(code: Int, customMessages: Map<Int, String> = emptyMap()): ApiError {
+    val custom = customMessages[code]
+    return when (code) {
+        400 -> ApiError.BadRequest(custom ?: "Dados inválidos")
+        401 -> ApiError.Unauthorized()
+        403 -> ApiError.Forbidden()
+        404 -> ApiError.NotFound(custom ?: "Não encontrado")
+        409 -> ApiError.Conflict(custom ?: "Conflito de dados")
+        in 500..599 -> ApiError.Server(code)
+        else -> ApiError.Unknown(custom ?: "Erro $code")
+    }
+}
 
 object ApiClient {
     val baseUrl: String = "https://server.lbwma.com"
@@ -55,54 +91,57 @@ object ApiClient {
         }
     }
 
+    private inline fun <T> runApi(block: () -> T): Result<T> = try {
+        Result.success(block())
+    } catch (e: Throwable) {
+        Result.failure(mapException(e))
+    }
+
     suspend fun getConversores(): Result<List<String>> = withContext(Dispatchers.IO) {
-        try {
+        runApi {
             val request = authRequest("$baseUrl/conversores").get().build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext Result.failure(Exception("Erro ${response.code}"))
+                if (!response.isSuccessful) throw mapHttpError(response.code)
                 val body = response.body?.string() ?: "[]"
                 val json = try {
                     JSONArray(body)
                 } catch (_: Exception) {
                     JSONObject(body).getJSONArray("conversores")
                 }
-                val list = (0 until json.length()).map { i ->
+                (0 until json.length()).map { i ->
                     val item = json.get(i)
                     if (item is JSONObject) item.getString("nome") else item.toString()
                 }
-                Result.success(list)
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     suspend fun createConversor(nome: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
+        runApi {
             val request = authRequest("$baseUrl/conversores?nome=${encode(nome)}")
                 .post("".toRequestBody(null))
                 .build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext Result.failure(Exception("Erro ${response.code}"))
-                Result.success(Unit)
+                if (!response.isSuccessful) throw mapHttpError(response.code, mapOf(
+                    409 to "Já existe um conversor com esse nome",
+                    400 to "Nome inválido"
+                ))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     suspend fun getFotos(nome: String): Result<List<Foto>> = withContext(Dispatchers.IO) {
-        try {
+        runApi {
             val request = authRequest("$baseUrl/conversores/${encode(nome)}/fotos").get().build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext Result.failure(Exception("Erro ${response.code}"))
+                if (!response.isSuccessful) throw mapHttpError(response.code)
                 val body = response.body?.string() ?: "[]"
                 val fotosArray = try {
                     JSONArray(body)
                 } catch (_: Exception) {
                     JSONObject(body).getJSONArray("fotos")
                 }
-                val list = (0 until fotosArray.length()).map { i ->
+                (0 until fotosArray.length()).map { i ->
                     val item = fotosArray.get(i)
                     if (item is JSONObject) {
                         Foto(
@@ -113,15 +152,12 @@ object ApiClient {
                         Foto(nome = item.toString(), tamanhoKb = 0.0)
                     }
                 }
-                Result.success(list)
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     suspend fun uploadFoto(nome: String, fileName: String, bytes: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
+        runApi {
             val body = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("fotos", fileName, bytes.toRequestBody("image/*".toMediaType()))
@@ -130,67 +166,47 @@ object ApiClient {
                 .post(body)
                 .build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext Result.failure(Exception("Erro ${response.code}"))
-                Result.success(Unit)
+                if (!response.isSuccessful) throw mapHttpError(response.code)
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     suspend fun renameConversor(nomeAtual: String, novoNome: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
+        runApi {
             val request = authRequest("$baseUrl/conversores/${encode(nomeAtual)}?novo_nome=${encode(novoNome)}")
                 .patch("".toRequestBody(null))
                 .build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    val msg = when (response.code) {
-                        404 -> "Conversor não encontrado"
-                        409 -> "Já existe um conversor com esse nome"
-                        400 -> "Nome inválido"
-                        else -> "Erro ${response.code}"
-                    }
-                    return@withContext Result.failure(Exception(msg))
-                }
-                Result.success(Unit)
+                if (!response.isSuccessful) throw mapHttpError(response.code, mapOf(
+                    404 to "Conversor não encontrado",
+                    409 to "Já existe um conversor com esse nome",
+                    400 to "Nome inválido"
+                ))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     suspend fun deleteConversor(nome: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
+        runApi {
             val request = authRequest("$baseUrl/conversores/${encode(nome)}")
                 .delete()
                 .build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    val msg = when (response.code) {
-                        404 -> "Conversor não encontrado"
-                        else -> "Erro ${response.code}"
-                    }
-                    return@withContext Result.failure(Exception(msg))
-                }
-                Result.success(Unit)
+                if (!response.isSuccessful) throw mapHttpError(response.code, mapOf(
+                    404 to "Conversor não encontrado"
+                ))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     suspend fun deleteFoto(nome: String, arquivo: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
+        runApi {
             val request = authRequest("$baseUrl/conversores/${encode(nome)}/fotos/${encode(arquivo)}")
                 .delete()
                 .build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext Result.failure(Exception("Erro ${response.code}"))
-                Result.success(Unit)
+                if (!response.isSuccessful) throw mapHttpError(response.code)
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
@@ -201,15 +217,12 @@ object ApiClient {
         "$baseUrl/conversores/${encode(nome)}/fotos/${encode(arquivo)}/thumb"
 
     suspend fun checkUpdate(): Result<Int> = withContext(Dispatchers.IO) {
-        try {
+        runApi {
             val request = Request.Builder().url("$baseUrl/app/version").get().build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext Result.failure(Exception("Erro ${response.code}"))
-                val json = JSONObject(response.body!!.string())
-                Result.success(json.getInt("versionCode"))
+                if (!response.isSuccessful) throw mapHttpError(response.code)
+                JSONObject(response.body!!.string()).getInt("versionCode")
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
@@ -220,7 +233,7 @@ object ApiClient {
     )
 
     suspend fun infer(imageBytes: ByteArray, fileName: String, tta: Boolean = false): Result<InferResult> = withContext(Dispatchers.IO) {
-        try {
+        runApi {
             val body = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("foto", fileName, imageBytes.toRequestBody("image/*".toMediaType()))
@@ -228,42 +241,40 @@ object ApiClient {
             val url = if (tta) "$baseUrl/infer?tta=true" else "$baseUrl/infer"
             val request = authRequest(url).post(body).build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext Result.failure(Exception("Erro ${response.code}"))
+                if (!response.isSuccessful) throw mapHttpError(response.code, mapOf(
+                    404 to "Modelo IA ainda não treinado"
+                ))
                 val json = JSONObject(response.body!!.string())
                 val top5Array = json.getJSONArray("top5")
                 val top5 = (0 until top5Array.length()).map { i ->
                     val item = top5Array.getJSONObject(i)
                     item.getString("class") to item.getDouble("confidence").toFloat()
                 }
-                Result.success(InferResult(
+                InferResult(
                     classe = json.getString("class"),
                     confianca = json.getDouble("confidence").toFloat(),
                     top5 = top5
-                ))
+                )
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     data class InferStatus(val ready: Boolean, val numClasses: Int, val classNames: List<String>)
 
     suspend fun inferStatus(): Result<InferStatus> = withContext(Dispatchers.IO) {
-        try {
+        runApi {
             val request = authRequest("$baseUrl/infer/status").get().build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext Result.failure(Exception("Erro ${response.code}"))
+                if (!response.isSuccessful) throw mapHttpError(response.code)
                 val json = JSONObject(response.body!!.string())
                 val names = json.optJSONArray("class_names")
                 val classNames = if (names != null) (0 until names.length()).map { names.getString(it) } else emptyList()
-                Result.success(InferStatus(
+                InferStatus(
                     ready = json.getBoolean("ready"),
                     numClasses = json.optInt("num_classes", 0),
                     classNames = classNames
-                ))
+                )
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 

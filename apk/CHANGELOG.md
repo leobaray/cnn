@@ -1,5 +1,61 @@
 # Changelog
 
+## [7.1] - 2026-05-04 — Redesign visual completo
+### Added
+- **Sistema de design** novo (`ui/Design.kt`): primaryGradient, heroGradient (cyan→indigo→violet→magenta), glassCardGradient, ambientGlow, helpers de pulse/scale/glow
+- **MeshAmbientBackground**: pano de fundo orgânico com 3 glows animados (cyan, violeta, magenta) que derivam suavemente — base premium para landings
+- **Hero gradient** aplicado em títulos principais (CNN logo, Conversores, Identificar, etc) — cores escultorais
+- **Skeleton com shimmer aprimorado**: gradiente translúcido de luz por cima do card base, em vez de um shimmer pesado
+- Avatar circular com inicial colorida nos cards de conversores (substitui barra fina)
+- Mini progress bar inline em cada card de conversor (acompanha 0-4400)
+- Card de filtro IA agora tem prefix badge destacado e progress bar gradient
+- Card de resultado IA com badge de confiança colorido + título da classe em hero gradient
+- Halo radial atrás do botão de captura
+- Sweep ring multicolor (cyan→violeta→magenta) no botão da câmera quando em modo rajada
+
+### Changed
+- **Paleta refinada**: cyan eletrico (`#22D3EE`), violeta (`#8B5CF6`), magenta (`#EC4899`), indigo (`#6366F1`), success emerald (`#10B981`)
+- Superfícies recalibradas: Dark00..Dark40 com tom azul-petróleo profundo, contrastes mais suaves
+- **Tipografia escultural**: pesos mais altos (Black, ExtraBold), letter-spacing negativo nos display, line-height otimizado
+- Botões primários (Entrar, Abrir Câmera, Adicionar, Novo, Enviar, Confirmar) com **gradient hero** + borda translúcida branca
+- Cards (login, conversores, filtros, resultado IA) com **borda gradient sutil** em vez de borda chapada
+- Dialogs com `Dark15` (mais elevado) e `RoundedCornerShape(28.dp)` para visual mais soft
+- Empty state do ConvertersScreen com halo glow ambiente + ícone duplo (gradient + border)
+- Top bar de Convertersrearrumada: título com hero gradient, busca em pill, toggle Fotos/IA full-width
+- IdentifyScreen landing redesenhada: mesh ambient background, ícone central com **3 anéis pulsantes** (sweep multicolor + ring concêntrico + halo radial)
+- Card de resultado IA agora tem pílula de confiança (cor reativa) e gradient sutil na borda
+
+### Removed
+- Background estático plano da IdentifyScreen (substituído por mesh ambiente)
+- Spinners simples (substituídos por skeleton boxes em todas as telas relevantes)
+
+## [7.0] - 2026-05-04
+### Added
+- **PhotoCountCache**: cache persistente de contagens por conversor + estado "completo" (verde) reage imediatamente ao atingir 4400 fotos e persiste entre aberturas (resolve a_resolver.md)
+- **IdentificationHistory**: histórico das ultimas 20 identificações da IA, exibido como cards horizontais na landing
+- **SettingsScreen**: nova tela de configurações acessível via icone de engrenagem na landing — logout, limpar histórico, limpar cache de imagens, info de versão/build
+- Botão de **logout** que apaga credenciais biométricas e sessão
+- **Busca de conversores** com filtro em tempo real na ConvertersScreen (ícone de lupa)
+- Toggle Fotos/IA agora ocupa toda a largura (mais fácil de tocar)
+- **Cancelar uploads** em andamento direto da PhotosScreen
+- Indicador de upload com **progresso real** (X de Y) e aviso de "Sem rede · tentando…" quando há retry
+- Vibração de sucesso quando IA identifica um conversor
+- Texto "X cadastrados · Y completos" no topo da ConvertersScreen
+- **Skeleton loading** em ConvertersScreen, PhotosScreen, FilterGridScreen e thumbnails (substitui spinners)
+- Componente reutilizável `SkeletonBox` com shimmer animado
+
+### Changed
+- **Versão dinâmica** no LoginScreen — substitui "v1.0" hardcoded pelo `versionName` real
+- **ApiClient** com hierarquia de exceções tipadas (`ApiError.Network/Timeout/Unauthorized/Forbidden/NotFound/Conflict/BadRequest/Server/Unknown`) e mensagens em português
+- **UploadManager** distingue erro permanente (HTTP) de transitório (rede/timeout) e desiste após 10 tentativas em vez de loop infinito
+- IdentifyScreen mostra histórico de identificações entre o status do modelo e o botão "Abrir Camera"
+- Loading inicial não pisca quando lista já tem dados em cache (mostra dados imediatamente, atualiza no background)
+
+### Fixed
+- **a_resolver.md**: pasta agora fica verde imediatamente ao atingir 4400 fotos (cache persistente em SharedPreferences) e mantém o estado entre aberturas; verifica inversa restaura para azul se cair abaixo de 4400
+- Renomear/apagar conversor agora sincroniza o `PhotoCountCache` (sem inconsistência de cor após operação)
+- Versão exibida no Login estava fixa em "v1.0" mesmo após bumps de versão
+
 ## [6.0] - 2026-03-25
 ### Added
 - **IdentifyScreen** — nova tela inicial pos-login com camera fullscreen para identificacao de conversores via IA
