@@ -1,7 +1,8 @@
-*.jpg
-*.jpeg
-*.JPG
-*.JPEG
+# IDE
+.idea/
+.vscode/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -9,6 +10,31 @@ __pycache__/
 .venv/
 venv/
 env/
-dist/
+
+# Build outputs
 build/
+dist/
 *.egg-info/
+
+# Android (apk/.gitignore lida com o resto)
+.kotlin/
+*.apk
+*.aab
+
+# OS
+.DS_Store
+Thumbs.db
+
+
+# Logs
+*.log
+
+# Datasets (imagens pesadas)
+*.jpg
+*.jpeg
+*.JPG
+*.JPEG
+
+# Sibling local (vão pra fora na Fase 3)
+ml/
+gerenciamento/

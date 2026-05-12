@@ -22,12 +22,11 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from PIL import Image
 from torchvision import transforms
 
-# Adiciona o diretório ml ao path para importar train
-ML_DIR = Path(__file__).resolve().parent.parent / "ml"
+# ml/ é sibling do repo cnn no layout: codigos/cnn/{cnn,ml}
+ML_DIR = Path(__file__).resolve().parents[2] / "ml"
 sys.path.insert(0, str(ML_DIR))
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATASET_DIR = BASE_DIR / "ml" / "datasets"
+DATASET_DIR = ML_DIR / "datasets"
 DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
 APK_PATH = Path(__file__).resolve().parent / "app.apk"
