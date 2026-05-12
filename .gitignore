@@ -16,7 +16,7 @@ build/
 dist/
 *.egg-info/
 
-# Android (apk/.gitignore lida com o resto)
+# Android
 .kotlin/
 *.apk
 *.aab
@@ -25,12 +25,5 @@ dist/
 .DS_Store
 Thumbs.db
 
-
 # Logs
 *.log
-
-# Datasets (imagens pesadas)
-*.jpg
-*.jpeg
-*.JPG
-*.JPEG

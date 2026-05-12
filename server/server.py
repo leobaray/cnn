@@ -43,11 +43,9 @@ _SIGNATURES = {
     b"BM": "bmp",
 }
 
-# Credenciais fixas
-USERS = {
-    ***REMOVED***,
-    ***REMOVED***
-}
+# Credenciais carregadas de arquivo local nao versionado
+USERS_FILE = Path(__file__).parent / "users.json"
+USERS = json.loads(USERS_FILE.read_text(encoding="utf-8"))
 
 app = FastAPI(title="CNN Fotos API")
 security = HTTPBasic()
