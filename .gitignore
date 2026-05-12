@@ -34,7 +34,3 @@ Thumbs.db
 *.jpeg
 *.JPG
 *.JPEG
-
-# Sibling local (vão pra fora na Fase 3)
-ml/
-gerenciamento/
