@@ -3,7 +3,7 @@
 ## Reporting a Vulnerability
 
 If you find a security issue in this project, please report it privately by
-emailing **leobarayoyoyo1@gmail.com** instead of opening a public issue.
+emailing **leonardobaray@outlook.com** instead of opening a public issue.
 
 Please include, when possible:
 
