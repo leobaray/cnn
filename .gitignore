@@ -31,7 +31,3 @@ Thumbs.db
 # Environment
 .env
 .env.local
-
-# Claude
-.claude
-CLAUDE.md
