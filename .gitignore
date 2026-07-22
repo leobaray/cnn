@@ -1,0 +1,50 @@
+# ---------- Android / Gradle ----------
+*.iml
+.gradle/
+build/
+/apk/build/
+/apk/app/build/
+/apk/captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.hprof
+
+# Signing — NEVER commit
+*.jks
+*.keystore
+keystore.properties
+
+# ---------- Python / FastAPI ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Server secrets & runtime artifacts — NEVER commit
+server/users.json
+app.apk
+
+# ML artifacts / datasets (produced at runtime, live in the sibling ml/ repo)
+datasets/
+output/
+*.pt
+*.pth
+
+# ---------- Secrets / environment ----------
+.env
+.env.*
+!.env.example
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
